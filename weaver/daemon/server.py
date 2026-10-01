@@ -117,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as e:
-            log.exception("处理 %s %s 出错", method, self.path)
+            log.exception("处理 %s %r 出错", method, self.path)          # %r：路径里的控制字符不进日志
             self._error(500, "internal", f"{type(e).__name__}: {(str(e).splitlines() or [''])[0]}")
 
     def _auth(self) -> None:
