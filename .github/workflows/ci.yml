@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - run: pip install ruff
+      - run: pip install ruff pyyaml
       # pyflakes, bugbear and pycodestyle errors: real bugs, not style (ruff.toml)
       - run: make lint
       - name: workflow and template YAML parses
