@@ -2,7 +2,6 @@
 样例都是按格式拼出来的假值，不是真密钥。"""
 from __future__ import annotations
 
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -137,8 +136,8 @@ class Integration(unittest.TestCase):
 
     def test_bash_saved_output_redacted(self):
         secret = SAMPLES["github-pat"]
-        out = run_bash(f"for i in $(seq 1 2000); do echo 'line {secret} padding padding'; done", self.root,
-                       outputs_dir=self.root / "out")
+        run_bash(f"for i in $(seq 1 2000); do echo 'line {secret} padding padding'; done", self.root,
+                 outputs_dir=self.root / "out")
         saved = next((self.root / "out").glob("*.log")).read_text()
         self.assertNotIn(secret, saved)
         self.assertIn("[已脱敏 GitHub PAT", saved)

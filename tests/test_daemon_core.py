@@ -1,13 +1,11 @@
 """常驻服务的纯函数部分：任务存储、步骤翻译、状态推导。全部离线。"""
 from __future__ import annotations
 
-import json
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
-from weaver import kernel as k
 from weaver.daemon.humanize import steps, title
 from weaver.daemon.status import summarize
 from weaver.daemon.tasks import LEDGER, TaskStore, default_title

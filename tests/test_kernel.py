@@ -75,7 +75,7 @@ def check_invariants(tc: unittest.TestCase, events: list[dict]) -> None:
     for e in events:
         if e.get("run_id"):
             by_run.setdefault(e["run_id"], []).append(e["type"])
-    for run, ts in by_run.items():
+    for ts in by_run.values():
         tc.assertEqual(ts.count("RunStarted"), 1)
         tc.assertLessEqual(ts.count("RunFinished"), 1)
         if "RunFinished" in ts:

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -19,7 +18,7 @@ from .. import kernel as k
 from ..errors import BadRequest, Conflict, NotFound  # noqa: F401  （接口层从这里导入）
 from ..permissions import command_prefix, mcp_key
 from .status import summarize, waits as list_waits
-from .tasks import LEDGER, TaskMeta, TaskStore
+from .tasks import TaskMeta, TaskStore
 
 log = logging.getLogger("weaverd")
 MAX_RUNNING = 4                                  # 默认值；weaverd 启动时在读了 .env 之后看 WEAVER_MAX_RUNNING

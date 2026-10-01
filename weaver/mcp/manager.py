@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -20,6 +21,9 @@ from urllib.parse import urlparse
 
 from . import auth
 from .config import ServerConfig
+
+if sys.version_info < (3, 11):      # 3.10 没有内置的，SDK（anyio）用的是 exceptiongroup 兼容包
+    from exceptiongroup import BaseExceptionGroup
 
 MAX_OUTPUT = 75_000          # 约 25k token（和 Claude Code 的 MCP 输出上限一样）
 

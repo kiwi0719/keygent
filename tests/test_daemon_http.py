@@ -20,7 +20,7 @@ from weaver.daemon.uploads import Uploads
 from weaver.models import FakeModel, reply
 from weaver.runner import Runner
 
-from .test_daemon_manager import Ask, box, blocking
+from .test_daemon_manager import Ask, box
 
 T = 5
 

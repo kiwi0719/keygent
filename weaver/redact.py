@@ -111,7 +111,7 @@ class Redactor:
                 text = text.replace(value, f"{PLACEHOLDER}环境变量 {name}]")
                 hits.append(Hit(f"env:{name}", f"环境变量 {name}"))
         for rid, rx in _COMPILED:
-            def sub(m: re.Match) -> str:
+            def sub(m: re.Match, rid=rid) -> str:
                 g = 1 if m.re.groups and m.group(1) is not None else 0
                 secret = m.group(g)
                 hits.append(Hit(rid, label(rid)))

@@ -1,0 +1,12 @@
+# 只查真 bug（pyflakes、bugbear、pycodestyle 的错误类），不管风格。CI 的 lint 任务跑它。
+target-version = "py310"
+extend-exclude = ["weaver/builtin_skills", "Keygent"]
+
+[lint]
+select = ["F", "B", "E"]
+ignore = [
+  "E501",   # 行长：中文注释按字符算会误报
+  "E731",   # lambda 赋值：小工具函数这样写更紧凑
+  "E741",   # 变量名 l / O：短循环里用得自然
+  "B905",   # zip(strict=)：长度不一时截断本来就是想要的
+]

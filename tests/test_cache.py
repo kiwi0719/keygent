@@ -10,7 +10,6 @@ from weaver.policy import Policy
 from weaver.providers import AnthropicModel, AnthropicQuirks, OpenAIChatModel, Quirks, make_model
 from weaver.runner import Runner
 from weaver.stores import MemoryEventStore
-from weaver.tools import ToolBox
 
 from .test_anthropic import OK as ANTHROPIC_OK
 from .test_providers import Retry

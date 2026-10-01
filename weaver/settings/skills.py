@@ -96,7 +96,7 @@ def _validate(home: Path, claude_home: Path, text: str, current: str | None) -> 
 def _write(f: Path, text: str) -> None:
     f = f.resolve() if f.is_symlink() else f           # 软链到 dotfiles 的：写到它指向的文件
     f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_name(f".SKILL.md.tmp")
+    tmp = f.with_name(".SKILL.md.tmp")
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(f)
 

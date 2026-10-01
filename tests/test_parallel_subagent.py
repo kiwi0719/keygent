@@ -11,7 +11,6 @@ from weaver import kernel as k
 from weaver.models import reply
 from weaver.permissions import PermissionPolicy
 from weaver.policy import Policy
-from weaver.project import project
 from weaver.runner import Runner
 from weaver.stores import MemoryBlobStore, MemoryEventStore
 from weaver.subagent import SubAgents

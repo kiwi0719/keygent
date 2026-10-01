@@ -112,7 +112,6 @@ class ToolBox:
         return run_bash(command, self.root, self.sandbox, timeout, self.root / ".weaver" / "outputs", self.running)
 
     def _default_tools(self) -> dict[str, Tool]:
-        root = self.root
         return {
             "read_file": Tool(_spec(
                 "read_file",

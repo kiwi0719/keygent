@@ -88,8 +88,8 @@ class Stress(Base):
                         ws = body["waits"]
                         if not ws:
                             continue
-                        w = rand(lambda r: r.choice(ws))
-                        dec = rand(lambda r: r.choice([c for c in w["choices"] if c != "edit"]))
+                        w = rand(lambda r: r.choice(ws))  # noqa: B023
+                        dec = rand(lambda r: r.choice([c for c in w["choices"] if c != "edit"]))  # noqa: B023
                         st, _ = self.c.call("POST", f"/v1/waits/{w['id']}", {"decision": dec, "note": "压测"})
                     elif op == "input":
                         st, _ = self.c.call("POST", f"/v1/tasks/{tid}/input", {"text": f"插话 {n}"})
