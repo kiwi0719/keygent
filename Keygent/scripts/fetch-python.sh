@@ -14,7 +14,7 @@ URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PB
 
 DEST=Vendor/python
 if [[ -x "$DEST/bin/python3" ]] && "$DEST/bin/python3" -c "import sys; sys.exit(sys.version.split()[0] != '$PY_VERSION')"; then
-  echo "已经是 Python $PY_VERSION：$DEST"
+  echo "已经是 Python ${PY_VERSION}：$DEST"
 else
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
