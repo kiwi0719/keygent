@@ -49,6 +49,8 @@ First public release.
 
 - MCP connection errors on Python 3.10 raised `NameError`
   (`BaseExceptionGroup` is built in only from 3.11).
+- `Keygent/scripts/fetch-python.sh` failed with "unbound variable" under a C
+  locale once Python was already downloaded.
 
 [Unreleased]: https://github.com/kiwi0719/keygent/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/kiwi0719/keygent/releases/tag/v0.1.0

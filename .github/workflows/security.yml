@@ -22,7 +22,8 @@ jobs:
   # scanned too, since the agent runs them.
   codeql:
     runs-on: ${{ matrix.language == 'swift' && 'macos-26' || 'ubuntu-24.04' }}
-    timeout-minutes: 30
+    # Swift is traced through a full app build (about 25 min with a cold cache)
+    timeout-minutes: 60
     permissions:
       contents: read
       security-events: write
