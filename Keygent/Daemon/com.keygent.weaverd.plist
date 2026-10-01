@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.keygent.weaverd</string>
+	<!-- 相对 App 包的路径，App 挪了位置也能找到 -->
+	<key>BundleProgram</key>
+	<string>Contents/Resources/weaverd</string>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.keygent.app</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<!-- 异常退出才拉起；正常退出（stop）不拉起 -->
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<!-- 不用 Background：那会压低 IO 优先级，Agent 跑构建、测试会很慢 -->
+	<key>ProcessType</key>
+	<string>Standard</string>
+</dict>
+</plist>

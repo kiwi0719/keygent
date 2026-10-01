@@ -1,0 +1,4 @@
+# MCP 支持需要官方 SDK。核心功能只用标准库；命令行里是可选依赖，Keygent.app 内嵌的 Python 一定带上
+# （Keygent/scripts/fetch-python.sh 会装，embed-weaverd.sh 没装就不让构建）。
+# python3 -m venv .venv && .venv/bin/pip install -r requirements-mcp.txt
+mcp>=2,<3

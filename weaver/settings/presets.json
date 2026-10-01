@@ -1,0 +1,43 @@
+[
+  {
+    "id": "filesystem",
+    "name": "filesystem",
+    "title": "文件",
+    "description": "读写你指定的目录里的文件（官方参考实现）",
+    "config": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"]},
+    "needs": [{"id": "dir", "kind": "arg", "label": "开放给它的目录"}]
+  },
+  {
+    "id": "fetch",
+    "name": "fetch",
+    "title": "抓网页",
+    "description": "抓取网页并转成文字（官方参考实现，要装 uv）",
+    "config": {"command": "uvx", "args": ["mcp-server-fetch"]},
+    "needs": []
+  },
+  {
+    "id": "playwright",
+    "name": "playwright",
+    "title": "浏览器",
+    "description": "打开网页、点击、填表、截图（微软 Playwright）",
+    "config": {"command": "npx", "args": ["-y", "@playwright/mcp@latest"]},
+    "needs": []
+  },
+  {
+    "id": "memory",
+    "name": "memory",
+    "title": "知识图谱记忆",
+    "description": "把实体和关系记在本机的一个文件里（官方参考实现）",
+    "config": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]},
+    "needs": []
+  },
+  {
+    "id": "github",
+    "name": "github",
+    "title": "GitHub",
+    "description": "查 issue、PR、仓库、代码（GitHub 官方远程服务器）",
+    "config": {"type": "http", "url": "https://api.githubcopilot.com/mcp/"},
+    "needs": [],
+    "login": "github"
+  }
+]

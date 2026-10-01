@@ -1,0 +1,32 @@
+#!/bin/sh
+# 内嵌 weaverd 的启动脚本，打包后在 Keygent.app/Contents/Resources/weaverd。
+# 由登录项（Contents/Library/LaunchAgents/com.keygent.weaverd.plist）调起，也可以直接运行来调试。
+here="$(cd "$(dirname "$0")" && pwd)"
+
+mkdir -p "$HOME/.weaver"
+# 起不来时（比如缺模型配置）的报错都在这里；正常运行的日志在 ~/.weaver/daemon.log
+exec >>"$HOME/.weaver/daemon.out" 2>&1
+
+# launchd 给的 PATH 只有 /usr/bin:/bin，Agent 跑 git / npm / brew 装的东西会找不到
+eval "$(/usr/libexec/path_helper -s)"
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"
+
+export PYTHONPATH="$here/weaver-src"
+export PYTHONNOUSERSITE=1
+export PYTHONUTF8=1
+# .pyc 别写进 App 包（会破坏签名），写到缓存目录
+export PYTHONPYCACHEPREFIX="$HOME/Library/Caches/com.keygent.app/pycache"
+
+cd "$HOME"
+# 模型配置固定用 ~/.weaver/.env（不然会捡到家目录里不相干的 .env）
+if [ $# -eq 0 ]; then
+  if [ ! -f "$HOME/.weaver/.env" ]; then
+    # 正常退出：launchd 不会每 10 秒重试一次刷日志；配好后在 Keygent 里点「重启 Weaver」
+    echo "$(date '+%F %T') 缺少模型配置 ~/.weaver/.env，没有启动"
+    exit 0
+  fi
+  set -- --env "$HOME/.weaver/.env"
+  # 记下这次跑的是哪份代码；App 发现包里的代码换了会重启我
+  cp "$here/weaverd.stamp" "$HOME/.weaver/daemon.stamp" 2>/dev/null
+fi
+exec "$here/python/bin/python3" -m weaver.daemon "$@"

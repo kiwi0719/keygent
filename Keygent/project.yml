@@ -1,0 +1,40 @@
+name: Keygent
+options:
+  bundleIdPrefix: com.keygent
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: 2.4.1
+targets:
+  Keygent:
+    type: application
+    platform: macOS
+    sources: [Keygent]
+    dependencies:
+      - package: MarkdownUI
+    info:
+      path: Keygent/Info.plist
+      properties:
+        CFBundleDisplayName: Keygent
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        LSApplicationCategoryType: public.app-category.productivity
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.keygent.app
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    postBuildScripts:
+      # 内嵌 weaverd：Python + weaver 源码 + 登录项配置（见 scripts/embed-weaverd.sh）
+      - name: Embed weaverd
+        script: "\"$SRCROOT/scripts/embed-weaverd.sh\""
+        basedOnDependencyAnalysis: false
