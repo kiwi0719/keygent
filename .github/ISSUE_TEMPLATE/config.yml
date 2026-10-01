@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/kiwi0719/keygent/security/advisories/new
+    about: Sandbox escapes, permission bypasses and secret leaks go here, privately.
+  - name: Design docs
+    url: https://github.com/kiwi0719/keygent/blob/main/design/README.md
+    about: How each part works and why; open an issue to challenge a recorded decision.

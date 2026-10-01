@@ -1,0 +1,13 @@
+# Weekly update PRs, grouped per ecosystem so CI runs once per batch.
+# The embedded Python (Keygent/scripts/fetch-python.sh) and ripgrep
+# (weaver/vendor/ripgrep/VERSION) are pinned by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups: { actions: { patterns: ["*"] } }
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly }
+    groups: { python: { patterns: ["*"] } }

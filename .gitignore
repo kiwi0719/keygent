@@ -3,3 +3,7 @@ __pycache__/
 .weaver/
 .DS_Store
 .venv/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+dist/

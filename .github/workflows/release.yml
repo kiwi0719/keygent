@@ -1,0 +1,147 @@
+name: release
+
+# Builds Keygent.app and publishes it as a GitHub release. A tag push `vX.Y.Z`
+# releases when X.Y.Z is MARKETING_VERSION in Keygent/project.yml, CHANGELOG.md
+# has a `## [X.Y.Z]` section, and the tagged commit is already on main. A
+# manual run builds and uploads the zip as a workflow artifact only.
+#
+# Two jobs. `build` runs the repository's code (tests, xcodebuild, the
+# embed-weaverd phase) with a read-only token. `publish` has write access and
+# runs none of it: it downloads the zip `build` made and creates the release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # main's history, for the check below
+          persist-credentials: false
+
+      # A tag push runs the workflow file of the tagged commit; only main is
+      # reviewed (its ruleset), so a release comes from a commit main has.
+      - name: A tag's commit is on main
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$TAG is on $GITHUB_SHA, which main does not have; tag a commit already merged to main"
+            exit 1
+          fi
+
+      - name: Version agrees with project.yml and CHANGELOG.md
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          v="$(sed -n 's/^ *MARKETING_VERSION: *"\(.*\)"/\1/p' Keygent/project.yml)"
+          if [ -z "$v" ]; then echo "::error::no MARKETING_VERSION in Keygent/project.yml"; exit 1; fi
+          if [ "$REF_TYPE" = tag ] && [ "${TAG#v}" != "$v" ]; then
+            echo "::error::tag $TAG does not match MARKETING_VERSION $v in Keygent/project.yml"
+            exit 1
+          fi
+          if [ "$REF_TYPE" = tag ] && ! grep -q "^## \[$v\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$v]' section"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - run: pip install ruff -r requirements-mcp.txt
+      - run: make check PYTHON=python
+
+      - run: brew install xcodegen
+      - run: xcodebuild -version
+      # no cached Python here: a release downloads and verifies its own
+      - run: make app CONFIG=Release
+
+      - name: Zip
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          app=Keygent/build/DD/Build/Products/Release/Keygent.app
+          codesign --verify --deep --strict "$app"
+          ditto -c -k --keepParent "$app" "dist/Keygent-$VERSION-arm64.zip"
+          (cd dist && shasum -a 256 "Keygent-$VERSION-arm64.zip" > "Keygent-$VERSION-arm64.zip.sha256")
+          ls -l dist && cat dist/*.sha256
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: keygent
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # only CHANGELOG.md is read here; nothing from the repository runs
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: keygent
+          path: dist
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on && /^\[[^]]+\]: / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          cat >> notes.md <<EOF
+
+          ### Install
+
+          Unzip, move \`Keygent.app\` to \`/Applications\`, then clear the quarantine flag once (the build is ad-hoc signed, not notarized):
+
+          \`\`\`bash
+          xattr -dr com.apple.quarantine /Applications/Keygent.app
+          \`\`\`
+
+          macOS 14+ on Apple silicon. Check the download with \`shasum -a 256 -c Keygent-$VERSION-arm64.zip.sha256\`.
+          EOF
+          cat notes.md
+      - name: Create or update the release
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/* -R "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Keygent $VERSION" --notes-file notes.md $prerelease
+          fi

@@ -1,0 +1,21 @@
+name: Feature request
+description: Something Keygent or Weaver should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The task or workflow, not the solution. What happens today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help
+      description: If it touches the kernel, the ledger or the API, say how it fits "the ledger is the only source of truth" (see CONTRIBUTING.md).
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and other agents
+      description: Workarounds you use, or how other agents handle it.

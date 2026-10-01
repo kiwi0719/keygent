@@ -1,0 +1,47 @@
+name: Bug report
+description: Something behaves differently from the README or the design docs
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Keygent version / commit
+      description: Finder → Get Info on Keygent.app, or `git rev-parse --short HEAD` for a source build
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options: [Keygent app, weaverd, weaver CLI]
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS and model
+      description: macOS / Linux version, and the provider and model ID (`WEAVER_BASE_URL` host + `WEAVER_MODEL`)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: >-
+        Steps to reproduce, and the relevant lines from `~/.weaver/daemon.log`,
+        `~/.weaver/daemon.out` or `weaver -s <id> --log`. Check them for API keys,
+        private code and file contents before pasting.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      description: If this lets the agent get past a permission, the sandbox or redaction, do not file it here; use private reporting (see SECURITY.md).
+      options:
+        - label: This is not a sandbox, permission or secret-leak issue
+          required: true

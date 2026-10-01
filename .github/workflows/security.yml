@@ -1,0 +1,72 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # advisories are published without a commit here
+  schedule:
+    - cron: "41 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Static analysis of Weaver (Python), Keygent (Swift) and the workflows
+  # themselves. Built-in skills are third-party prose and scripts; they are
+  # scanned too, since the agent runs them.
+  codeql:
+    runs-on: ${{ matrix.language == 'swift' && 'macos-26' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: swift
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@v7
+      - if: matrix.language == 'swift'
+        uses: actions/cache@v6
+        with:
+          path: Keygent/Vendor/python
+          key: python-${{ runner.arch }}-${{ hashFiles('Keygent/scripts/fetch-python.sh', 'requirements-mcp.txt') }}
+      - if: matrix.language == 'swift'
+        run: brew install xcodegen
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+      - if: matrix.language == 'swift'
+        run: make app
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Known vulnerabilities in the one runtime dependency (the MCP SDK and what
+  # it pulls in), as Keygent.app bundles it.
+  pip-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - run: pip install pip-audit
+      - run: pip-audit -r requirements-mcp.txt --progress-spinner off

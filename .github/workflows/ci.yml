@@ -1,0 +1,125 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+  # every pull request runs, docs-only ones included: the main ruleset
+  # requires `ci-ok`, and a check that never reports blocks the merge
+  pull_request:
+  workflow_dispatch:
+  # Weekly: the runner images, Homebrew's xcodegen and the MCP SDK move
+  # without a commit here.
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+# Pull requests: the newest push wins. Every other run gets a group of its own
+# and is kept, so a merge's run is never cancelled by the schedule's.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}-{2}', github.ref, github.event_name, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - run: pip install ruff
+      # pyflakes, bugbear and pycodestyle errors: real bugs, not style (ruff.toml)
+      - run: make lint
+      - name: workflow and template YAML parses
+        run: |
+          python3 -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" \
+            .github/workflows/*.yml .github/ISSUE_TEMPLATE/*.yml .github/dependabot.yml
+
+  # The offline suite (fake models, fake SSE streams). Python 3.10 is the
+  # floor, 3.14 is what Keygent.app embeds. Linux runs with bubblewrap so the
+  # sandbox tests run for real; arm64 Linux has no bundled ripgrep and covers
+  # the pure-Python search fallback. One job runs without the MCP SDK: the
+  # core must work on the standard library alone.
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, python: "3.10", mcp: true }
+          - { os: ubuntu-24.04, python: "3.12", mcp: true }
+          - { os: ubuntu-24.04, python: "3.14", mcp: true }
+          - { os: ubuntu-24.04, python: "3.12", mcp: false }
+          - { os: ubuntu-24.04-arm, python: "3.12", mcp: true }
+          - { os: macos-26, python: "3.14", mcp: true }
+    name: test (${{ matrix.os }}, py${{ matrix.python }}${{ !matrix.mcp && ', no MCP' || '' }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - if: runner.os == 'Linux'
+        name: bubblewrap, with unprivileged user namespaces allowed
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap
+          # Ubuntu 24.04's AppArmor blocks the user namespace bwrap needs
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - if: matrix.mcp
+        run: pip install -r requirements-mcp.txt
+      - name: sandbox and search backend in use
+        run: |
+          python -c "from weaver.sandbox import Sandbox; print('sandbox:', Sandbox('.').describe())"
+          python -c "from weaver.tools.search import find_rg; print('ripgrep:', find_rg() or 'pure Python')"
+          python -c "from weaver.mcp import sdk_available; print('MCP SDK:', sdk_available())"
+      - run: make test PYTHON=python
+
+  # Keygent.app as people build it: the embedded Python, the project
+  # regenerated from project.yml, a Debug build with the embed-weaverd phase.
+  app:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: Keygent/Vendor/python
+          key: python-${{ runner.arch }}-${{ hashFiles('Keygent/scripts/fetch-python.sh', 'requirements-mcp.txt') }}
+      - run: brew install xcodegen
+      - run: xcodebuild -version
+      - run: make app
+      # the committed Keygent.xcodeproj is what ⌘R builds; it must be what
+      # project.yml generates
+      - name: Keygent.xcodeproj matches project.yml
+        run: |
+          git diff --exit-code -- Keygent/Keygent.xcodeproj \
+            || { echo "::error::run 'cd Keygent && xcodegen generate' and commit the project"; exit 1; }
+      - name: weaverd starts from the bundle
+        run: |
+          app=Keygent/build/DD/Build/Products/Debug/Keygent.app/Contents/Resources
+          test -x "$app/python/bin/python3"
+          test -s "$app/weaverd.stamp"
+          PYTHONPATH="$app/weaver-src" "$app/python/bin/python3" -c "import weaver.daemon, mcp; print('weaverd imports OK')"
+
+  # The one check the main ruleset requires: green only when every job above
+  # succeeded. Adding or renaming a job needs no ruleset change, only an edit
+  # to `needs` here.
+  ci-ok:
+    if: always()
+    needs: [lint, test, app]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: every job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null
