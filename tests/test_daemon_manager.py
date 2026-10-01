@@ -62,8 +62,10 @@ class Harness(unittest.TestCase):
         self.assertTrue(self.mgr.wait_idle(task_id, timeout=T), "任务没在限定时间内停下")
 
 
-def blocking(gate: threading.Event, text="好"):
+def blocking(gate: threading.Event, text="好", entered: threading.Event | None = None):
     def step(_):
+        if entered:
+            entered.set()
         gate.wait(T)
         return reply(text)
     return step
@@ -255,9 +257,10 @@ class Lifecycle(Harness):
         self.assertEqual(self.mgr.list(), [])
         self.assertIn(("archived", t, {}), self.seen)
 
-        gate = threading.Event()
-        self.next_script = [blocking(gate, "做完了")]
+        gate, entered = threading.Event(), threading.Event()
+        self.next_script = [blocking(gate, "做完了", entered)]
         t = self.mgr.create("在跑的")["id"]
+        self.assertTrue(entered.wait(T))                               # 真的在调模型了再归档（否则排队中就被取消、直接移走）
         self.mgr.archive(t)                                            # 在跑：先取消，停下后再移走
         self.assertEqual(len(self.mgr.list()), 1)
         gate.set()

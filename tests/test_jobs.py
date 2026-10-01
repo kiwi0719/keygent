@@ -27,9 +27,12 @@ T = 10
 def alive(pid: int) -> bool:
     try:
         os.killpg(pid, 0)
-        return True
     except (ProcessLookupError, PermissionError):
         return False
+    # 本进程启动的子进程被杀后没人回收，成了僵尸：Linux 上 killpg(…, 0) 照样成功（macOS 不会），这里算它不在了。
+    # 真实场景里它的父进程（被强杀的旧 weaverd）已经没了，会被 init / launchd 回收。
+    stat = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout
+    return not stat.strip().startswith("Z")
 
 
 def job_id(out: str) -> str:
