@@ -62,6 +62,22 @@ final class WeaverClient {
 
     func tasks() async throws -> [TaskSummary] { (try await get("/v1/tasks") as TaskList).tasks }
 
+    func prompts(workdir: String?) async throws -> [PromptItem] {
+        struct L: Decodable { var prompts: [PromptItem] }
+        return (try await get("/v1/prompts?" + Self.query(["workdir": workdir ?? ""])) as L).prompts
+    }
+
+    func createTask(prompt: PromptItem, arguments: [String: String], workdir: String?) async throws -> TaskSummary {
+        var body: [String: Any] = ["prompt": ["server": prompt.server, "name": prompt.name, "arguments": arguments]]
+        if let workdir { body["workdir"] = workdir }
+        return try await send("POST", "/v1/tasks", json: body)
+    }
+
+    /// 工具返回的图片
+    func blob(_ id: String, mime: String) async throws -> Data {
+        try await raw("GET", "/v1/blobs/\(id.pathEscaped)?" + Self.query(["mime": mime]), body: nil, headers: [:]).0
+    }
+
     func createTask(text: String, workdir: String? = nil, attachments: [String] = []) async throws -> TaskSummary {
         var body: [String: Any] = ["text": text]
         if let workdir { body["workdir"] = workdir }
@@ -120,9 +136,10 @@ final class WeaverClient {
     func waits() async throws -> [WaitItem] { (try await get("/v1/waits") as WaitList).waits }
 
     /// decision: allow / deny / always / continue / stop / hint；「改一下」= allow + args
-    func answer(_ waitID: String, decision: String, note: String? = nil, args: [String: JSONValue]? = nil) async throws -> TaskSummary {
-        struct Body: Encodable { var decision: String; var note: String?; var args: [String: JSONValue]? }
-        let data = try JSONEncoder().encode(Body(decision: decision, note: note, args: args))
+    func answer(_ waitID: String, decision: String, note: String? = nil, args: [String: JSONValue]? = nil,
+                values: [String: JSONValue]? = nil) async throws -> TaskSummary {
+        struct Body: Encodable { var decision: String; var note: String?; var args: [String: JSONValue]?; var values: [String: JSONValue]? }
+        let data = try JSONEncoder().encode(Body(decision: decision, note: note, args: args, values: values))
         let (d, _) = try await raw("POST", "/v1/waits/\(waitID.pathEscaped)", body: data, headers: ["Content-Type": "application/json"])
         return try decode(d)
     }

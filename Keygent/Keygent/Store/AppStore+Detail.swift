@@ -90,6 +90,7 @@ extension AppStore {
             if launcher.picker { fileScroll(rows) }
             else if launcher.wsPicker { wsScroll(rows) }
             else if launcher.archivedMode { archScroll(rows) }
+            else if launcherSlashMode { promptScroll(rows) }
             else if launcherSearchMode { resultScroll(rows) }
             else if launcherFull { launcherScroll(rows) }
         case .queue where queue.expanded:

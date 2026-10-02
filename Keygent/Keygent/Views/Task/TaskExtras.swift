@@ -451,3 +451,168 @@ struct ArchivedList: View {
         .padding(.bottom, 8)
     }
 }
+
+// MARK: - MCP 服务器问你（表单 / 网址）
+
+struct ElicitCard: View {
+    @Environment(AppStore.self) private var store
+    let wait: WaitItem
+    var busy = false
+    var focused: FocusState<InputField?>.Binding
+
+    var body: some View {
+        let fields = store.elicitFields(wait)
+        let cur = store.task.elicitFor == wait.id ? store.task.elicitCur : 0
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(wait.title)
+                        .font(KFont.sans(15, .bold))
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(wait.mode == "url" ? "要你在网页上弄完，Weaver 看不到网页里的内容"
+                         : "\(wait.server ?? "服务器") 在要信息；不要在这里填密码 · 填的内容只交给服务器")
+                        .font(KFont.sans(12))
+                        .foregroundStyle(K.text3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if busy { ProgressView().controlSize(.small) }
+            }
+
+            if wait.mode == "url" {
+                Button { if let u = wait.url.flatMap(URL.init(string:)) { NSWorkspace.shared.open(u) } } label: {
+                    HStack(spacing: 8) {
+                        Text(wait.url ?? "").font(KFont.mono(12)).lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Kbd("⌘O")
+                        Text("打开").font(KFont.sans(12))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.8)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(Array(fields.enumerated()), id: \.element.id) { i, f in
+                        row(f, index: i, selected: i == cur)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Text(wait.mode == "url" ? "弄完了按 ⌘↵" : "tab 换字段 · 空格 是 / 否 · ⌘数字 选")
+                    .font(KFont.sans(12))
+                    .foregroundStyle(K.text3)
+                Spacer()
+                OutlineButton(title: "取消这次调用") { store.answer(wait, "cancel") }
+                OutlineButton(title: "不给 ⌫") { store.answer(wait, "decline") }
+                InkButton(title: wait.mode == "url" ? "好了 ⌘↵" : "交上去 ⌘↵") { store.elicitSubmit(wait) }
+            }
+            .disabled(busy)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(RoundedRectangle(cornerRadius: 10).fill(K.amberBg))
+        .onAppear { store.elicitPrepare(wait) }
+    }
+
+    @ViewBuilder
+    private func row(_ f: ElicitField, index i: Int, selected: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(f.title + (f.required ? " *" : ""))
+                    .font(KFont.sans(13, .medium))
+                if !f.description.isEmpty {
+                    Text(f.description).font(KFont.sans(11)).foregroundStyle(K.text3).lineLimit(2)
+                }
+            }
+            .frame(width: 170, alignment: .leading)
+            Group {
+                switch f.type {
+                case "boolean":
+                    let on = store.task.elicitValues[f.name] == .bool(true)
+                    Button { store.elicitSet(f.name, .bool(!on)); store.task.elicitCur = i } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: on ? "checkmark.square.fill" : "square")
+                                .foregroundStyle(on ? K.ink : K.text4)
+                            Text(on ? "是" : "否").font(KFont.sans(13))
+                            if selected { Kbd("空格") }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableStyle())
+                case "enum":
+                    HStack(spacing: 6) {
+                        ForEach(Array((f.options ?? []).enumerated()), id: \.offset) { j, o in
+                            let picked = store.task.elicitValues[f.name] == .string(o)
+                            Button { store.elicitSet(f.name, .string(o)); store.task.elicitCur = i } label: {
+                                HStack(spacing: 6) {
+                                    if selected { Kbd("⌘\(j + 1)", active: picked) }
+                                    Text(o).font(KFont.sans(13))
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(picked ? Color.white : Color.white.opacity(0.45)))
+                                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(picked ? K.ink : .clear))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PressableStyle())
+                        }
+                    }
+                default:
+                    TextField("", text: Binding(get: { store.elicitText(f.name) },
+                                                set: { store.elicitSet(f.name, .string($0)) }),
+                              prompt: Text(f.type == "string" ? "" : "数字").foregroundColor(K.text4))
+                        .textFieldStyle(.plain)
+                        .font(KFont.sans(13))
+                        .focused(focused, equals: .elicit(i))
+                        .padding(.horizontal, 8)
+                        .frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(.white))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(selected ? K.ink : K.border))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.white.opacity(0.5) : .clear))
+    }
+}
+
+// MARK: - 工具返回的图片（MCP）
+
+struct BlobThumb: View {
+    @Environment(AppStore.self) private var store
+    let image: StepImage
+    @State private var ns: NSImage? = nil
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let ns {
+                Image(nsImage: ns)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: min(240, max(ns.size.width, 24)), maxHeight: min(160, max(ns.size.height, 24)),
+                           alignment: .leading)          // 小图不放大
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(K.line2))
+            } else if failed {
+                Text("[图片取不到]").font(KFont.sans(12)).foregroundStyle(K.text4)
+            } else {
+                RoundedRectangle(cornerRadius: 6).fill(K.skeleton).frame(width: 120, height: 80)
+            }
+        }
+        .task(id: image.id) {
+            do {
+                ns = NSImage(data: try await store.client.blob(image.id, mime: image.mime))
+                failed = ns == nil
+            } catch {
+                failed = true
+            }
+        }
+    }
+}

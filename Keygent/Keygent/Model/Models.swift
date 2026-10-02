@@ -149,6 +149,7 @@ extension WaitItem {
         case "input": base = "不是你发的输入，要不要接"
         case "trust": base = "不信任也不影响任务，只是这些先不加载"
         case "question": base = "它在等你回答"
+        case "elicit": base = "服务器在等你回答 · 填的内容只交给服务器，不给模型看"
         default: base = ""
         }
         guard let a = fromAgent, !a.isEmpty else { return base }
@@ -161,6 +162,7 @@ extension WaitItem {
             if c == "allow" { return "信任" }
             if c == "deny" { return "不信任" }
         }
+        if isSampling, c == "always", case .string(let s)? = call?.args["server"] { return "总是允许 \(s)" }
         return Choice.label(c)
     }
 
@@ -175,8 +177,13 @@ extension WaitItem {
     /// 文字输入框发出去的选择：卡住 = 给个提示；其它 = 拒绝并说明原因
     var noteChoice: String? { kind == "trust" ? nil : ["hint", "deny"].first { choices.contains($0) } }
 
-    /// 能一键放行的：信任确认不算（信任一个项目要你单独看过）
-    var isBulkApprovable: Bool { choices.contains("allow") && kind != "trust" }
+    /// 能一键放行的：信任确认、借用模型不算（要你单独看过）
+    var isBulkApprovable: Bool { choices.contains("allow") && kind != "trust" && !isSampling }
+
+    /// MCP 服务器问你（api.md v1.9）：表单 / 网址
+    var isElicit: Bool { kind == "elicit" }
+    /// MCP 服务器想借用模型
+    var isSampling: Bool { call?.name == "sampling" }
 
     /// 改文件审批的 diff 卡标题：路径
     var diffTitle: String {
@@ -186,7 +193,7 @@ extension WaitItem {
 
     /// bash 的命令 / 其它工具的参数预览
     var callPreview: String? {
-        guard let call else { return nil }
+        guard let call, !isSampling else { return nil }
         if call.args.count == 1, let v = call.args.values.first, case .string(let s) = v { return s }
         guard let data = try? JSONEncoder.pretty.encode(call.args) else { return nil }
         return String(data: data, encoding: .utf8)
@@ -205,6 +212,9 @@ enum Choice {
         case "hint": return "给个提示"
         case "answer": return "发给它"
         case "skip": return "你自己定"
+        case "accept": return "交上去"
+        case "decline": return "不给"
+        case "cancel": return "取消这次调用"
         default: return c
         }
     }
@@ -222,7 +232,8 @@ enum CapsuleState: Equatable {
     init(_ s: StatusSummary?) {
         guard let s else { self = .offline; return }
         if s.waiting > 0, let w = s.firstWait {
-            self = .waiting(task: w.task, title: w.taskTitle, more: s.waiting - 1, question: w.kind == "question")
+            self = .waiting(task: w.task, title: w.taskTitle, more: s.waiting - 1,
+                            question: w.kind == "question" || w.kind == "elicit")
         } else if let e = s.error {
             self = .error(task: e.task, title: e.taskTitle)
         } else if s.running > 0 {

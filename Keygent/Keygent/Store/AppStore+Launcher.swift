@@ -51,6 +51,13 @@ extension AppStore {
 
     /// 输入变了：搜索模式下停 0.3 秒再搜，免得每敲一个字发一次
     func launcherQueryChanged() {
+        if launcherSlashMode {
+            launcher.pick = nil
+            loadPrompts()
+            launcher.promptPick = 0
+            launcher.promptTop = 0
+            return
+        }
         guard launcherSearchMode else {
             if !launcher.results.isEmpty || launcher.searching { launcher.results = []; launcher.searching = false }
             launcher.resultPick = nil
@@ -357,6 +364,8 @@ extension AppStore {
         if launcher.wsPicker { return workspaceKey(e) }
         if launcher.picker { return fileKey(e) }
         if launcher.archivedMode { return archivedKey(e) }
+        if launcher.promptArgs != nil { return promptArgsKey(e) }
+        if launcherSlashMode, !(e.cmd && (e.isChar("o") || e.isChar("e"))) { return slashKey(e) }
         if e.cmd, e.shift, e.isChar("a") { openArchived(); return true }
 
         if e.cmd, e.shift, e.isChar("o") { openFinder(); return true }

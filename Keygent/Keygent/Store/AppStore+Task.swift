@@ -51,7 +51,9 @@ extension AppStore {
     var taskSteps: [Step] { task.detail?.steps ?? [] }
     var taskWaits: [WaitItem] { waits.filter { $0.task == task.id } }
     /// 放行卡（审批 / 卡住了 / 信任）：问题另有问题卡（taskQuestion），两张可以同时在
-    var taskGate: WaitItem? { taskWaits.first { !$0.isQuestion } }
+    var taskGate: WaitItem? { taskWaits.first { !$0.isQuestion && !$0.isElicit } }
+    /// MCP 服务器问你（表单 / 网址）：自己一张卡（AppStore+Elicit）
+    var taskElicit: WaitItem? { taskWaits.first { $0.isElicit } }
     var taskCreated: Double { task.summary?.created ?? task.detail?.task.created ?? 0 }
     /// 这一轮从哪一刻开始：最后一句「你说的」，没有就是任务创建时
     var taskRoundStart: Double { taskSteps.last(where: { $0.kind == .you })?.ts ?? taskCreated }
@@ -226,6 +228,7 @@ extension AppStore {
 
     func taskKey(_ e: KeyEvent) -> Bool {
         if let r = questionKey(e, draft: task.draft) { return r }
+        if let w = taskElicit, let r = elicitKey(e, w) { return r }
         // 改过的文件：⌘D 看 diff，⌘Z 撤销选中的那个（按两次）
         if e.cmd, e.isChar("d") { openDiff(); return true }
         if e.cmd, e.isChar("z"), !e.inInput { undoFile(taskChangeCurrent); return true }

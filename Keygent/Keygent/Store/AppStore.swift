@@ -4,6 +4,8 @@ import AppKit
 
 enum InputField: Hashable {
     case launcher, task, queueEdit, detail, editor
+    /// MCP 服务器提问的第几个字段；启动器里 prompt 的第几个参数
+    case elicit(Int), promptArg(Int)
     /// 设置页（AppStore+Settings）：模型页第几行、多行编辑器、MCP 服务器名字、常用服务器筛选、要填的第几项
     case settingsRow(Int), settingsEditor, settingsName, settingsFilter, settingsNeed(Int)
 }
@@ -73,6 +75,15 @@ struct LauncherState {
     var archPick = 0
     var archTop = 0
     var archLoading = false
+    /// 输入以 / 开头：MCP prompts（按工作区拉一次）、选中第几条、窗口顶；选了带参数的 → 参数表单
+    var prompts: [PromptItem] = []
+    var promptsFor: String? = nil
+    var promptsLoading = false
+    var promptPick = 0
+    var promptTop = 0
+    var promptArgs: PromptItem? = nil
+    var argValues: [String] = []
+    var argCur = 0
 }
 
 struct TaskState {
@@ -106,6 +117,10 @@ struct TaskState {
     var changePick = 0
     /// 结果卡底部改过的文件太多时折起来，展开了没有
     var changesOpen = false
+    /// MCP 服务器问你：在填哪一件（等待 id）、填了什么、光标在第几个字段
+    var elicitFor: String? = nil
+    var elicitValues: [String: JSONValue] = [:]
+    var elicitCur = 0
 }
 
 struct PeekState {
@@ -510,7 +525,7 @@ final class AppStore {
     // MARK: 回答等待（③ ④ 共用）
 
     func answer(_ w: WaitItem, _ decision: String, note: String? = nil, args: [String: JSONValue]? = nil,
-                done: ((Bool) -> Void)? = nil) {
+                values: [String: JSONValue]? = nil, done: ((Bool) -> Void)? = nil) {
         task.answering = w.id
         queue.working = w.id
         Task { @MainActor in
@@ -519,7 +534,7 @@ final class AppStore {
                 if queue.working == w.id { queue.working = nil }
             }
             do {
-                let s = try await client.answer(w.id, decision: decision, note: note, args: args)
+                let s = try await client.answer(w.id, decision: decision, note: note, args: args, values: values)
                 waits.removeAll { $0.id == w.id }
                 if let i = tasks.firstIndex(where: { $0.id == s.id }) { tasks[i] = s }
                 if task.id == s.id { task.summary = s; reloadTaskSoon() }

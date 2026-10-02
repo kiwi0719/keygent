@@ -19,7 +19,7 @@ struct LauncherView: View {
                 TextField(
                     "",
                     text: $store.launcher.query,
-                    prompt: Text(picked != nil ? "接着说，或者直接按 ↵ 打开" : "交代一件新事，或从下面选一个接着做；? 开头 = 搜以前的任务")
+                    prompt: Text(picked != nil ? "接着说，或者直接按 ↵ 打开" : "交代一件新事，或从下面选一个接着做；? 搜以前的任务 · / 用 MCP 提示词")
                         .foregroundColor(K.text4)
                 )
                 .textFieldStyle(.plain)
@@ -40,6 +40,10 @@ struct LauncherView: View {
                 OfflineNotice()
             } else if store.launcher.archivedMode {
                 ArchivedList()
+            } else if let p = store.launcher.promptArgs {
+                PromptArgsForm(prompt: p, focused: $focused)
+            } else if store.launcherSlashMode {
+                PromptList()
             } else if store.launcherSearchMode {
                 SearchResults()
             } else {
@@ -249,6 +253,117 @@ struct LauncherView: View {
 }
 
 // MARK: - 子视图
+
+/// 输入以 / 开头：MCP 服务器提供的提示词
+private struct PromptList: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let L = store.launcher
+        let list = store.filteredPrompts
+        let win = store.promptWindow
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                SectionLabel("MCP 提示词" + (list.isEmpty ? "" : " · \(list.count) 个"))
+                Spacer()
+                if L.promptsLoading { ProgressView().controlSize(.mini) }
+                Text("↵ 选用 · ⌘ + 数字 = 眼前第几个").font(KFont.sans(12)).foregroundStyle(K.text4)
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+            if list.isEmpty && !L.promptsLoading {
+                Text(L.prompts.isEmpty ? "这个工作区里能用的 MCP 服务器没有提供提示词（设置 › MCP 里加服务器）"
+                     : "没有匹配“\(store.promptFilter)”的提示词")
+                    .font(KFont.sans(13))
+                    .foregroundStyle(K.text4)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 22)
+            }
+            ForEach(win, id: \.self) { i in
+                let p = list[i]
+                Button { if L.promptPick == i { store.choosePrompt(p) } else { store.launcher.promptPick = i } } label: {
+                    HStack(spacing: 12) {
+                        Text(p.command).font(KFont.mono(13, .medium)).foregroundStyle(K.ink).lineLimit(1)
+                        Text(p.description.isEmpty ? p.title : p.description)
+                            .font(KFont.sans(12)).foregroundStyle(K.text3).lineLimit(1)
+                        Spacer(minLength: 8)
+                        if !p.arguments.isEmpty {
+                            Text(p.arguments.map { $0.name + ($0.required ? "*" : "") }.joined(separator: " "))
+                                .font(KFont.mono(11)).foregroundStyle(K.text4).lineLimit(1)
+                        }
+                        Kbd("⌘\(i - win.lowerBound + 1)", active: L.promptPick == i, size: 12, weight: .medium, minWidth: 34)
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                }
+                .buttonStyle(RowStyle(selected: L.promptPick == i, selectedFill: .white, radius: 8, selectedStroke: K.ink))
+            }
+            if list.count > ListWindow.size {
+                WindowBar(window: win, total: list.count, unit: "个", up: "↑", down: "↓") { store.promptScroll($0) }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+}
+
+/// 选了带参数的提示词：一行一个参数（必填的标 *），tab 换行，↵ 交出去
+private struct PromptArgsForm: View {
+    @Environment(AppStore.self) private var store
+    let prompt: PromptItem
+    var focused: FocusState<InputField?>.Binding
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text(prompt.command).font(KFont.mono(14, .medium))
+                Text(prompt.description).font(KFont.sans(12)).foregroundStyle(K.text3).lineLimit(1)
+                Spacer()
+                if store.launcher.submitting { ProgressView().controlSize(.small) }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
+            ForEach(Array(prompt.arguments.enumerated()), id: \.offset) { i, a in
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(a.name + (a.required ? " *" : "")).font(KFont.mono(13, .medium))
+                        if !a.description.isEmpty {
+                            Text(a.description).font(KFont.sans(11)).foregroundStyle(K.text3).lineLimit(1)
+                        }
+                    }
+                    .frame(width: 200, alignment: .leading)
+                    TextField("", text: Binding(get: { store.launcher.argValues[safe: i] ?? "" },
+                                                set: { if store.launcher.argValues.indices.contains(i) { store.launcher.argValues[i] = $0 } }))
+                        .textFieldStyle(.plain)
+                        .font(KFont.sans(14))
+                        .focused(focused, equals: .promptArg(i))
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(.white))
+                        .overlay(RoundedRectangle(cornerRadius: 7)
+                            .strokeBorder(store.launcher.argCur == i ? K.ink : K.border))
+                }
+                .padding(.horizontal, 8)
+            }
+            HStack(spacing: 14) {
+                HStack(spacing: 5) { Kbd("tab"); Text("换行") }
+                HStack(spacing: 5) { Kbd("↵"); Text("下一个 · 填完交出去") }
+                Spacer()
+                HStack(spacing: 5) { Kbd("esc"); Text("换一个") }
+            }
+            .font(KFont.sans(12))
+            .foregroundStyle(K.text3)
+            .padding(.horizontal, 8)
+            .padding(.top, 6)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+}
 
 /// 搜索结果：命中的任务、哪一类记录、前后一段摘录
 private struct SearchResults: View {

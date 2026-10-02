@@ -243,6 +243,13 @@ private struct ReviewPane: View {
                                 .padding(.top, 4)
                         }
                     }
+                    if w.isElicit, d == nil {
+                        if let fs = w.fields, !fs.isEmpty {
+                            Text("要填：" + fs.map { $0.title }.joined(separator: "、")).font(KFont.sans(13)).foregroundStyle(K.text2)
+                        }
+                        InkButton(title: "去回答", kbd: "↵") { store.openTask(id: w.task) }
+                            .padding(.top, 4)
+                    }
                     if let diff = w.diff, !diff.isEmpty {
                         DiffCard(title: w.diffTitle, diff: diff, maxHeight: 220)
                             .padding(.top, 4)

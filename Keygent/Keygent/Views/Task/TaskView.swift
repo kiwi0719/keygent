@@ -93,6 +93,9 @@ struct TaskView: View {
                                          onLater: { store.questionLater(w) },
                                          onMore: { store.openQueue() })
                         }
+                        if let w = store.taskElicit {
+                            ElicitCard(wait: w, busy: T.answering == w.id, focused: $focused)
+                        }
                         if let w = store.taskGate {
                             GateCard(wait: w, more: store.taskWaits.count - (store.taskQuestion == nil ? 1 : 2),
                                      busy: T.answering == w.id,
@@ -977,6 +980,11 @@ struct StepDetail: View {
                             .font(step.tool.isEmpty ? KFont.sans(13) : KFont.mono(12))
                             .foregroundStyle(K.text2)
                             .textSelection(.enabled)
+                    }
+                    if let imgs = step.images, !imgs.isEmpty {
+                        HStack(alignment: .top, spacing: 8) {
+                            ForEach(imgs, id: \.self) { BlobThumb(image: $0) }
+                        }
                     }
                     if step.isMemoryNote {
                         Button { store.openSettings(tab: .memory) } label: {

@@ -13,6 +13,7 @@
 		06D7AFBC9086F9801A6C9495 /* WorkspacePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C930071D9007F608EFB3C7 /* WorkspacePickerView.swift */; };
 		074669A56273C2AA4C6331EB /* DiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71DC2291CD77CBEB7FDE79DA /* DiffView.swift */; };
 		09F5EB7BAD00C8CC775FB55A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1495390750D248A296CAC82 /* SettingsView.swift */; };
+		0BA5203A37A1A87056E54419 /* AppStore+Elicit.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A91DD963742512B01901CA /* AppStore+Elicit.swift */; };
 		0E48369BD53DF04014C2DABE /* WeaverClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A948323BE85AE01AE393D6B3 /* WeaverClient.swift */; };
 		0F387C20C5162B1E953FA061 /* ModelPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E45D479BDD3DE6D5816FB18 /* ModelPage.swift */; };
 		104B2DA1DECD3B3CC991E7C5 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112A368CFA7CDD668677479D /* MarkdownView.swift */; };
@@ -42,6 +43,7 @@
 		AB80BD4B33EED8D5430BA672 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E057521A4B7AFEE463867F4 /* DetailView.swift */; };
 		ACE21E4D79838C7F50B05262 /* PermissionsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C3D24558065F2977B93C716 /* PermissionsPage.swift */; };
 		B856B82A8E6C1EB1856A022B /* AppStore+Launcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA6910D581E2974D5B39530 /* AppStore+Launcher.swift */; };
+		C2B5CFF1173B11E523099D0D /* AppStore+Prompts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7507A2831289C31C518F3896 /* AppStore+Prompts.swift */; };
 		CE540232DC3EBF141C50AC58 /* AppStore+Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3BEBAB7902C23BEFC26F342 /* AppStore+Settings.swift */; };
 		D1AC964D1B29F661EF0E6F88 /* FilePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A28066B6D873C759593208 /* FilePickerView.swift */; };
 		D1DA187A9D2C8B671FF7B10F /* EventStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71759219D7FE6167085C90F0 /* EventStream.swift */; };
@@ -80,6 +82,7 @@
 		6FAA5716D08A28A976975ABB /* LauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherView.swift; sourceTree = "<group>"; };
 		71759219D7FE6167085C90F0 /* EventStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStream.swift; sourceTree = "<group>"; };
 		71DC2291CD77CBEB7FDE79DA /* DiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffView.swift; sourceTree = "<group>"; };
+		7507A2831289C31C518F3896 /* AppStore+Prompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Prompts.swift"; sourceTree = "<group>"; };
 		895D294F88B3B8EB3B4FD48A /* PeekController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeekController.swift; sourceTree = "<group>"; };
 		8E057521A4B7AFEE463867F4 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		952D8E9C5AD963208F5C7BE7 /* AppStore+Queue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Queue.swift"; sourceTree = "<group>"; };
@@ -101,6 +104,7 @@
 		F3BEBAB7902C23BEFC26F342 /* AppStore+Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Settings.swift"; sourceTree = "<group>"; };
 		F5AE48CC98D86840E2757608 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		F6DAE101907215D96030BBD6 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		F7A91DD963742512B01901CA /* AppStore+Elicit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Elicit.swift"; sourceTree = "<group>"; };
 		FAEF4E5A94EA3E6D3D96300F /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		FF69DD304B8EADD8B98DB905 /* KeyEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyEvent.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -122,8 +126,10 @@
 			children = (
 				FAEF4E5A94EA3E6D3D96300F /* AppStore.swift */,
 				3574A3353C2F250F5BA4774E /* AppStore+Detail.swift */,
+				F7A91DD963742512B01901CA /* AppStore+Elicit.swift */,
 				0E0DA3280B13E5C3AB031E98 /* AppStore+Extras.swift */,
 				BAA6910D581E2974D5B39530 /* AppStore+Launcher.swift */,
+				7507A2831289C31C518F3896 /* AppStore+Prompts.swift */,
 				A454520997D9BACC956DDF19 /* AppStore+Question.swift */,
 				952D8E9C5AD963208F5C7BE7 /* AppStore+Queue.swift */,
 				F3BEBAB7902C23BEFC26F342 /* AppStore+Settings.swift */,
@@ -387,8 +393,10 @@
 				1CFDBA52473F966C597B0690 /* APIModels.swift in Sources */,
 				D2787C99EB75BE5BEF2329E2 /* AppDelegate.swift in Sources */,
 				A9C23EF2292484C1F3D2F73B /* AppStore+Detail.swift in Sources */,
+				0BA5203A37A1A87056E54419 /* AppStore+Elicit.swift in Sources */,
 				188A6C46EDFB8147E4AAE60F /* AppStore+Extras.swift in Sources */,
 				B856B82A8E6C1EB1856A022B /* AppStore+Launcher.swift in Sources */,
+				C2B5CFF1173B11E523099D0D /* AppStore+Prompts.swift in Sources */,
 				4511096EB63B1871B289F0FA /* AppStore+Question.swift in Sources */,
 				715B424453BD562F18E635F9 /* AppStore+Queue.swift in Sources */,
 				CE540232DC3EBF141C50AC58 /* AppStore+Settings.swift in Sources */,

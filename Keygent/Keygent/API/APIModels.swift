@@ -37,6 +37,30 @@ struct Step: Codable, Equatable {
     var diff: String?
     /// 派子 Agent 那一步：子账本（GET /v1/tasks/{id}/agents/{sub}）
     var sub: String?
+    /// 工具返回的图片（MCP）：GET /v1/blobs/{id} 取
+    var images: [StepImage]?
+}
+
+struct StepImage: Codable, Equatable, Hashable {
+    var id: String
+    var mime: String
+}
+
+/// MCP 服务器提供的 prompt（GET /v1/prompts，启动器里 / 选用）
+struct PromptItem: Codable, Equatable, Identifiable {
+    struct Argument: Codable, Equatable {
+        var name: String
+        var description: String
+        var required: Bool
+    }
+    var server: String
+    var name: String
+    var title: String
+    var description: String
+    var arguments: [Argument]
+
+    var id: String { server + ":" + name }
+    var command: String { "/\(server):\(name)" }
 }
 
 struct WaitCall: Codable, Equatable {

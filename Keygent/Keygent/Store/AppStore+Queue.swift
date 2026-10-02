@@ -160,6 +160,11 @@ extension AppStore {
             openQuestion(w)
             return true
         }
+        // MCP 服务器问你：去它的任务页填表
+        if let w = queueCurrent, w.isElicit, queue.decided[w.id] == nil, e.key == .tab || (e.plain && e.key == .enter) {
+            openTask(id: w.task)
+            return true
+        }
         if e.key == .tab { requestFocus(.queueEdit); return true }
         if e.key == .escape { queue.expanded = false; return true }
         if e.plain, e.key == .up || e.key == .down {
