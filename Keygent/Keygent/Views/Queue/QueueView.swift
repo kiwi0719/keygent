@@ -60,7 +60,7 @@ struct QueueView: View {
         if store.focusedField == .queueEdit {
             return [KeyHint("↵", "发给它"), KeyHint("esc", "离开输入框")]
         }
-        var k = [KeyHint("↑↓", "换一件"), KeyHint("⌘1–5", "跳到眼前第几件")]
+        var k = [KeyHint("↑↓", "换一件")]
         if let w = store.queueCurrent, w.isQuestion {
             k.append(KeyHint("↵", "去回答"))
         } else if let w = store.queueCurrent {
@@ -68,7 +68,6 @@ struct QueueView: View {
             if let s = w.secondaryChoice { k.append(KeyHint("⌫", w.label(s))) }
             if w.noteChoice != nil { k.append(KeyHint("tab", w.kind == "stuck" ? "给个提示" : "说明原因")) }
         }
-        k.append(KeyHint("⌘⇧↵", "放行剩下"))
         return k
     }
 }
@@ -268,9 +267,11 @@ private struct ReviewPane: View {
                         .padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 6).fill(K.line3))
                     }
-                    Text(w.sub)
-                        .font(KFont.sans(11))
-                        .foregroundStyle(K.text4)
+                    if !w.sub.isEmpty {
+                        Text(w.sub)
+                            .font(KFont.sans(11))
+                            .foregroundStyle(K.text4)
+                    }
 
                     Spacer(minLength: 0)
 

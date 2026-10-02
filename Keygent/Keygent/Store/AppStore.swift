@@ -50,7 +50,6 @@ struct LauncherState {
 
     var query = ""
     var pick: Int? = nil
-    var shown = 3
     var top = 0
     /// ⌘O 添加文件：面板开着没有、高亮第几个、窗口从第几个开始
     var picker = false
@@ -257,7 +256,8 @@ final class AppStore {
     @ObservationIgnored var openFinder: () -> Void = {}
     @ObservationIgnored var openFolder: () -> Void = {}
     @ObservationIgnored var resignInput: () -> Void = {}
-    @ObservationIgnored var notify: (_ title: String, _ body: String) -> Void = { _, _ in }
+    /// 面板收着时来了新的等待（AppDelegate 接到胶囊下的小卡上）。系统通知只由 weaverd 在 App 没开时发
+    @ObservationIgnored var onWaitWhileHidden: () -> Void = {}
     /// 任务页中间那块滚动区按键滚动（↑↓），由视图里的 ScrollNudger 注册
     @ObservationIgnored var taskScrollBy: (CGFloat) -> Void = { _ in }
 
@@ -373,7 +373,7 @@ final class AppStore {
             if w.isQuestion {
                 questionArrived(w)                 // 弹出问题卡，不再另发系统通知
             } else if !panelVisible {
-                notify("\(w.taskTitle) · 等你", w.title)
+                onWaitWhileHidden()                // 面板收着：胶囊下的小卡说一声（面板开着时顶上的横幅说）
             }
             refreshStatusSoon()
 

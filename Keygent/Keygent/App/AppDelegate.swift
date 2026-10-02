@@ -1,14 +1,12 @@
 import AppKit
 import Carbon.HIToolbox
-import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = AppStore()
     private var panel: PanelController!
     private var capsule: CapsuleController!
     private var peek: PeekController!
     private var hotKeys: [HotKey] = []
-    private var askedNotify = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 只留一个 Keygent：新起的接管，旧的退出（不然两个面板、两个胶囊、⌥空格 呼出的可能是另一个）
@@ -39,9 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             if inside { self.peek.show(for: nil) } else { self.peek.hide() }
         }
 
-        // 面板没开着时出现新的等待 → 系统通知（api.md 3：App 在后台时弹系统通知）
-        UNUserNotificationCenter.current().delegate = self
-        store.notify = { [weak self] title, body in self?.postNotification(title, body) }
+        // 面板收着时来了新的等待 → 胶囊下的小卡多停一会儿
+        store.onWaitWhileHidden = { [weak self] in self?.peek.show(for: 8) }
 
         // ⌥空格：呼出启动器（⌘空格 是 Spotlight，留给系统）。隔离的调试实例（KEYGENT_DEBUG_NAME）不抢全局快捷键
         if ProcessInfo.processInfo.environment["KEYGENT_DEBUG_NAME"] == nil {
@@ -75,28 +72,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func openCapsuleTarget() {
         store.openCapsuleTarget()
         panel.show()
-    }
-
-    // MARK: 系统通知
-
-    private func postNotification(_ title: String, _ body: String) {
-        let center = UNUserNotificationCenter.current()
-        let send = {
-            let c = UNMutableNotificationContent()
-            c.title = title
-            c.body = body
-            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
-        }
-        if askedNotify { send(); return }
-        askedNotify = true
-        center.requestAuthorization(options: [.alert, .sound]) { ok, _ in if ok { send() } }
-    }
-
-    /// 点通知 → 打开胶囊里的那件事
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
-                                withCompletionHandler completionHandler: @escaping () -> Void) {
-        DispatchQueue.main.async { self.openCapsuleTarget() }
-        completionHandler()
     }
 
     /// 无 Dock 图标的 App 也需要 Edit 菜单，输入框里的 ⌘C/⌘V/⌘A 才能用。

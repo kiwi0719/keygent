@@ -273,7 +273,7 @@ private struct ResultCard: View {
                 Text("结果")
                 Spacer()
                 if let u = T.detail?.usage, u.steps > 0 || u.tokens > 0 {
-                    Text("\(u.steps) 步 · \(formatTokens(u.tokens)) tokens"
+                    Text("\(formatTokens(u.tokens)) tokens"
                          + ((u.extractTokens ?? 0) > 0 ? " · 记忆 \(formatTokens(u.extractTokens!))" : ""))
                         .font(KFont.mono(11))
                         .help((u.extractTokens ?? 0) > 0 ? "任务结束后自动提取记忆用掉的 token（不算在这一轮的预算里）" : "")
@@ -650,9 +650,11 @@ struct QuestionCard: View {
                         .font(KFont.sans(15, .bold))
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(wait.sub)
-                        .font(KFont.sans(12))
-                        .foregroundStyle(K.text3)
+                    if !wait.sub.isEmpty {
+                        Text(wait.sub)
+                            .font(KFont.sans(12))
+                            .foregroundStyle(K.text3)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if busy { ProgressView().controlSize(.small) }
@@ -738,9 +740,11 @@ struct GateCard: View {
                             .font(KFont.sans(13))
                             .lineSpacing(3)
                     }
-                    Text(wait.sub)
-                        .font(KFont.sans(12))
-                        .foregroundStyle(K.text3)
+                    if !wait.sub.isEmpty {
+                        Text(wait.sub)
+                            .font(KFont.sans(12))
+                            .foregroundStyle(K.text3)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if busy { ProgressView().controlSize(.small) }
@@ -804,9 +808,6 @@ private struct ErrorCard: View {
                 (Text("出错了").fontWeight(.bold) + Text("：" + note))
                     .font(KFont.sans(14))
                     .lineSpacing(4)
-                Text("可以在下面接着说，让它换个办法。")
-                    .font(KFont.sans(12))
-                    .foregroundStyle(K.text3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             OutlineButton(title: "接着说 tab", action: onReply)
@@ -838,7 +839,7 @@ private struct ProcessPanel: View {
                         .padding(16)
                 }
                 if steps.count > ListWindow.size {
-                    Text("第 \(win.lowerBound + 1)–\(win.upperBound) 步 / 共 \(steps.count) 步 · ↑↓ 选步骤")
+                    Text("\(win.lowerBound + 1)–\(win.upperBound) / \(steps.count)")
                         .font(KFont.sans(11))
                         .foregroundStyle(K.text4)
                         .padding(.horizontal, 8)
@@ -850,7 +851,7 @@ private struct ProcessPanel: View {
                     Button { store.task.step = i } label: {
                         HStack(spacing: 10) {
                             StepDot(step: p)
-                            Text(p.title)
+                            Text(p.listTitle)
                                 .font(KFont.sans(p.status == "note" ? 12 : 13))
                                 .foregroundStyle(p.kind == .step && p.status != "note" ? K.ink : K.text2)
                                 .strikethrough(p.status == "denied", color: K.text4)

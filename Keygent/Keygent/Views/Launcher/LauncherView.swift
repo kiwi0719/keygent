@@ -167,16 +167,12 @@ struct LauncherView: View {
 
     private var recentList: some View {
         let L = store.launcher
-        let full = store.launcherFull
         let w = store.launcherWindow
 
         return VStack(spacing: 2) {
             HStack {
                 SectionLabel("最近任务 · 选一个接着做")
                 Spacer()
-                Text("⌘ + 数字 = 眼前第几条")
-                    .font(KFont.sans(12))
-                    .foregroundStyle(K.text4)
                 Button { store.openArchived() } label: {
                     HStack(spacing: 5) {
                         Kbd("⌘⇧A")
@@ -215,31 +211,7 @@ struct LauncherView: View {
                 }
             }
 
-            if store.loadedOnce, L.shown < store.tasks.count {
-                Button { store.launcherMore() } label: {
-                    HStack(spacing: 4) {
-                        Text("展开更多")
-                            .font(KFont.sans(13))
-                            .foregroundStyle(K.text2)
-                        Text("· 还有 \(store.tasks.count - L.shown) 条 · 或在最后一条按 ↓")
-                            .font(KFont.mono(11))
-                            .foregroundStyle(K.text4)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(K.dash, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableStyle())
-                .padding(.horizontal, 8)
-                .padding(.top, 6)
-                .padding(.bottom, 4)
-            }
-
-            if full, store.tasks.count > LauncherState.viewCount {
+            if store.tasks.count > LauncherState.viewCount {
                 WindowBar(window: w.top..<(w.top + w.count), total: store.tasks.count) { store.launcherScroll($0) }
                 .padding(.horizontal, 8)
                 .padding(.top, 8)
@@ -267,7 +239,6 @@ private struct PromptList: View {
                 SectionLabel("MCP 提示词" + (list.isEmpty ? "" : " · \(list.count) 个"))
                 Spacer()
                 if L.promptsLoading { ProgressView().controlSize(.mini) }
-                Text("↵ 选用 · ⌘ + 数字 = 眼前第几个").font(KFont.sans(12)).foregroundStyle(K.text4)
             }
             .padding(.horizontal, 8)
             .padding(.top, 4)
@@ -358,11 +329,6 @@ private struct SearchResults: View {
                 SectionLabel(L.searchedFor.isEmpty ? "搜索以前的任务" : "“\(L.searchedFor)” · \(L.results.count) 条")
                 Spacer()
                 if L.searching { ProgressView().controlSize(.mini) }
-                if !L.results.isEmpty {
-                    Text("⌘ + 数字 = 眼前第几条")
-                        .font(KFont.sans(12))
-                        .foregroundStyle(K.text4)
-                }
             }
             .padding(.horizontal, 8)
             .padding(.top, 4)

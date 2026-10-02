@@ -3,14 +3,10 @@ import AppKit
 // MARK: - ① 启动器
 
 extension AppStore {
-    var launcherFull: Bool { launcher.shown >= tasks.count }
-
+    /// 最近任务：一屏 5 条的窗口，↑↓ / 滚轮挪
     var launcherWindow: (top: Int, count: Int) {
-        if launcherFull {
-            let top = min(launcher.top, max(0, tasks.count - LauncherState.viewCount))
-            return (top, min(LauncherState.viewCount, tasks.count - top))
-        }
-        return (0, min(launcher.shown, tasks.count))
+        let top = min(launcher.top, max(0, tasks.count - LauncherState.viewCount))
+        return (top, min(LauncherState.viewCount, tasks.count - top))
     }
 
     var launcherRows: [(index: Int, slot: Int, task: TaskSummary)] {
@@ -30,11 +26,6 @@ extension AppStore {
 
     func pickLauncher(_ i: Int) {
         if launcher.pick == i { launcherSubmit() } else { launcher.pick = i }
-    }
-
-    /// 一次全部展开（列表本来就是全量，不分页）
-    func launcherMore() {
-        launcher.shown = tasks.count
     }
 
     func launcherScroll(_ d: Int) {
@@ -382,25 +373,9 @@ extension AppStore {
         if e.plain, e.key == .down || e.key == .up {
             guard !tasks.isEmpty else { return true }
             let down = e.key == .down
-            let full = launcherFull
-            let mx = full ? tasks.count : min(launcher.shown, tasks.count)
-            if down, !full, launcher.pick == mx - 1 {
-                launcherMore()
-            }
-            let limit = launcherFull ? tasks.count : mx
-            let p: Int
-            if let cur = launcher.pick {
-                p = max(0, min(limit - 1, cur + (down ? 1 : -1)))
-            } else {
-                p = w.top
-            }
-            var t = launcher.top
-            if launcherFull {
-                if p < t { t = p }
-                if p > t + LauncherState.viewCount - 1 { t = p - LauncherState.viewCount + 1 }
-            }
+            let p = launcher.pick.map { max(0, min(tasks.count - 1, $0 + (down ? 1 : -1))) } ?? w.top
             launcher.pick = p
-            launcher.top = t
+            launcher.top = ListWindow.fit(p, top: launcher.top, count: tasks.count)
             return true
         }
 

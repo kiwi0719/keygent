@@ -71,6 +71,14 @@ extension Step {
         return verb.count > 8 ? (t, "") : (verb, obj)
     }
 
+    /// 列表里显示的标题：■ □ 记号已经分出你说 / Agent 说，去掉「你：」「Agent：」前缀
+    var listTitle: String {
+        var t = title
+        for p in ["你：", "Agent："] where t.hasPrefix(p) { t = String(t.dropFirst(p.count)) }
+        // 列表里一行纯文字：Markdown 的加粗、行内代码记号去掉
+        return kind == .agent ? t.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "") : t
+    }
+
     /// 「记住了 N 条」「记住：…」这类步骤：可以跳到设置 › 记忆
     var isMemoryNote: Bool {
         ["remember", "forget"].contains(tool) || (status == "note" && title.hasPrefix("记住了"))
@@ -142,18 +150,15 @@ extension Step {
 extension WaitItem {
     /// 前端按 kind 写死的小字
     var sub: String {
+        // 琥珀底色和「● 等你」已经说了在等你；这里只写别处看不出来的
         let base: String
         switch kind {
-        case "approval": base = "停下来等你"
-        case "stuck": base = "它在原地打转"
         case "input": base = "不是你发的输入，要不要接"
         case "trust": base = "不信任也不影响任务，只是这些先不加载"
-        case "question": base = "它在等你回答"
-        case "elicit": base = "服务器在等你回答"
         default: base = ""
         }
         guard let a = fromAgent, !a.isEmpty else { return base }
-        return "来自子 Agent「\(a)」· " + base
+        return "来自子 Agent「\(a)」" + (base.isEmpty ? "" : " · " + base)
     }
 
     /// 按钮文字：信任确认用“信任 / 不信任”，其余同 Choice.label

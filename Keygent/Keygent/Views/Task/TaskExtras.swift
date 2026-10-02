@@ -307,7 +307,7 @@ struct AgentSheetView: View {
                                 Button { store.agentView?.step = i } label: {
                                     HStack(spacing: 10) {
                                         StepDot(step: p)
-                                        Text(p.title)
+                                        Text(p.listTitle)
                                             .font(KFont.sans(p.status == "note" ? 12 : 13))
                                             .foregroundStyle(p.kind == .step && p.status != "note" ? K.ink : K.text2)
                                             .strikethrough(p.status == "denied", color: K.text4)
@@ -363,7 +363,6 @@ struct AgentSheetView: View {
 
                 HStack(spacing: 14) {
                     HStack(spacing: 5) { Kbd("↑↓"); Text("选步骤") }
-                    HStack(spacing: 5) { Kbd("⌘1–5"); Text("眼前第几步") }
                     Spacer()
                     HStack(spacing: 5) { Kbd("esc"); Text("返回") }
                 }

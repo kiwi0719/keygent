@@ -14,9 +14,6 @@ struct FilePickerView: View {
                 Text("添加文件")
                     .font(KFont.sans(15, .bold))
                 Spacer()
-                Text("也可以直接拖进来")
-                    .font(KFont.sans(12))
-                    .foregroundStyle(K.text4)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
@@ -26,11 +23,6 @@ struct FilePickerView: View {
             HStack {
                 SectionLabel("最近用过的文件")
                 Spacer()
-                if !recent.isEmpty {
-                    Text("⌘ + 数字 = 眼前第几个")
-                        .font(KFont.sans(12))
-                        .foregroundStyle(K.text4)
-                }
             }
             .padding(.horizontal, 18)
             .padding(.top, 10)
@@ -98,7 +90,7 @@ struct FilePickerView: View {
             }
 
             HStack {
-                Text("↑↓ 空格 选中/取消 · ⌘数字 直接选 · ⌘⇧O 打开系统访达")
+                HStack(spacing: 5) { Kbd("⌘⇧O"); Text("访达") }
                 Spacer()
                 Button {
                     store.launcher.picker = false

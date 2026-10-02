@@ -231,7 +231,7 @@ struct WindowBar: View {
 
     var body: some View {
         HStack {
-            Text("第 \(window.lowerBound + 1)–\(window.upperBound) \(unit) / 共 \(total) \(unit) · 编号随滚动重排")
+            Text("\(window.lowerBound + 1)–\(window.upperBound) / \(total)")
                 .font(KFont.sans(12))
                 .foregroundStyle(K.text4)
                 .lineLimit(1)

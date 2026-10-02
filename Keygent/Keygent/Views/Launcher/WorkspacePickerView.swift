@@ -14,7 +14,7 @@ struct WorkspacePickerView: View {
                 Text("工作区")
                     .font(KFont.sans(15, .bold))
                 Spacer()
-                Text("新任务在这个文件夹里读写 · 也可以把文件夹拖进来")
+                Text("新任务在这个文件夹里读写")
                     .font(KFont.sans(12))
                     .foregroundStyle(K.text4)
             }
@@ -32,11 +32,6 @@ struct WorkspacePickerView: View {
                 HStack {
                     SectionLabel("最近用过的")
                     Spacer()
-                    if !recent.isEmpty {
-                        Text("⌘ + 数字 = 眼前第几个")
-                            .font(KFont.sans(12))
-                            .foregroundStyle(K.text4)
-                    }
                 }
                 .padding(.horizontal, 8)
                 .padding(.top, 8)
@@ -75,7 +70,7 @@ struct WorkspacePickerView: View {
             .padding(10)
 
             HStack {
-                Text("↑↓ ↵ 选 · ⌘数字 直接选 · ⌘O 打开系统访达")
+                HStack(spacing: 5) { Kbd("⌘O"); Text("访达") }
                 Spacer()
                 Button {
                     store.launcher.wsPicker = false

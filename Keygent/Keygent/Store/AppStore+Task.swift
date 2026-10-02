@@ -114,7 +114,15 @@ extension AppStore {
             .suffix(2)
             .filter { !($0.element.kind == .agent && !final.isEmpty && $0.element.text.trimmingCharacters(in: .whitespacesAndNewlines) == final) }
             .filter { !(live && $0.element.kind == .agent && $0.element.ts >= roundStart) }
+            .filter { !($0.element.kind == .you && sameAsTitle($0.element.text)) }      // 就是标题那句，别说两遍
             .map { ($0.offset, $0.element) })
+    }
+
+    /// 这句话就是任务标题（标题默认取第一句话的前 20 个字）
+    private func sameAsTitle(_ text: String) -> Bool {
+        guard let title = task.summary?.title, !title.isEmpty else { return false }
+        let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return line == title || (title.hasSuffix("…") && line.hasPrefix(String(title.dropLast())))
     }
 
     func taskStatus() -> (text: String, color: Color) {
@@ -265,7 +273,8 @@ extension AppStore {
             return true
         }
         if e.cmd, e.key == .enter { taskPrimary(); return true }
-        if e.cmd, e.key == .delete { taskCancel(); return true }
+        // ⌘⌫ 停下；输入框里有字时它是“删到行首”，不抢
+        if e.cmd, e.key == .delete, !e.inInput || task.draft.isEmpty { taskCancel(); return true }
         if e.inInput {
             if e.key == .escape {
                 if task.hintFor != nil { task.hintFor = nil } else { requestFocus(nil) }
