@@ -38,6 +38,15 @@ def default_title(text: str) -> str:
     return line[:TITLE_LEN] + ("…" if len(line) > TITLE_LEN else "") or "未命名任务"
 
 
+def revoked_keys(task_dir: Path) -> set[str]:
+    """这个任务里被撤销的“总是允许”（meta.json 的 extra.revoked）。读不到当作没有。"""
+    try:
+        data = json.loads((Path(task_dir) / "meta.json").read_text(encoding="utf-8"))
+        return set((data.get("extra") or {}).get("revoked") or [])
+    except (OSError, ValueError, AttributeError):
+        return set()
+
+
 def _write_atomic(path: Path, data: str) -> None:
     """先写临时文件再改名：进程在写的过程中崩溃也不会留下半个文件。"""
     tmp = path.with_name(path.name + f".tmp-{os.getpid()}")
@@ -119,6 +128,42 @@ class TaskStore:
         metas = [m for d in self.root.iterdir() if d.is_dir() and not d.name.startswith(".")
                  if (m := self.get(d.name)) is not None]
         return sorted(metas, key=lambda m: -self.updated(m.id))
+
+    # ------------------------------------------------ 归档
+
+    def archived_dirs(self) -> dict[str, Path]:
+        """归档的任务：任务 id → 最新的那个归档目录（同一个任务恢复后又归档过，取最新的）。"""
+        out: dict[str, Path] = {}
+        root = self.root / ".archive"
+        if not root.is_dir():
+            return out
+        for d in sorted(root.iterdir(), key=lambda d: d.name):
+            if d.is_dir() and (d / "meta.json").exists():
+                task_id = d.name.rsplit("-", 2)[0] if d.name.count("-") >= 2 else d.name
+                out[task_id] = d
+        return out
+
+    def archived_meta(self, d: Path) -> TaskMeta | None:
+        try:
+            data = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return TaskMeta(**{k: data[k] for k in TaskMeta.__dataclass_fields__ if k in data})
+
+    def archived_store(self, d: Path) -> JsonlEventStore:
+        return JsonlEventStore(d)
+
+    def restore(self, task_id: str) -> TaskMeta:
+        d = self.archived_dirs().get(task_id)
+        if d is None:
+            raise FileNotFoundError(f"没有这个归档的任务：{task_id}")
+        if self.dir(task_id).exists():
+            raise FileExistsError(f"已经有这个任务了：{task_id}")
+        shutil.move(str(d), str(self.dir(task_id)))
+        self._stores.pop(task_id, None)
+        meta = self.get(task_id)
+        assert meta is not None
+        return meta
 
     def archive(self, task_id: str) -> Path:
         src = self.dir(task_id)

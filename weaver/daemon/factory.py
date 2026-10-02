@@ -33,7 +33,7 @@ from ..todo import tool as todo_tool
 from ..ask import tool as ask_tool
 from ..tools import ToolBox
 from ..tools.recall import tool as recall_tool
-from .tasks import LEDGER, TaskMeta
+from .tasks import LEDGER, TaskMeta, revoked_keys
 
 log = logging.getLogger("weaverd")
 
@@ -75,6 +75,7 @@ class RunnerFactory:
                                   context_window=self.window, max_output=self.model.max_tokens,
                                   compact_at=self.compact_at, interactive=True, ask_user=True)
         scratch = _under(root, self.scratch)            # 临时目录里的任务没有“项目”，只有用户级记忆
+        policy.revoked = lambda: revoked_keys(store.root)   # 设置 › 权限里撤销的“总是允许”
         tools, memory, skills = ToolBox(root), Memory(root, project=not scratch), Skills(root)
         agents = AgentTypes(root, project=not scratch)
         mcp = TaskMcp(McpConfig(root, self.home, project=not scratch), self.mcp_pool, tools)
@@ -91,7 +92,8 @@ class RunnerFactory:
                               context_window=self.window, max_output=self.model.max_tokens,
                               compact_at=self.compact_at, skills=skills, agent_types=agents,
                               model_for=self.model_for, jobs=jobs, mcp=mcp,
-                              fork_source={"model": self.model, "system": system, "tools": tools})
+                              fork_source={"model": self.model, "system": system, "tools": tools},
+                              undo_session=meta.id)
         tools.on_interrupt.append(subagents.cancel_all)   # 取消主任务时，正在跑的子 Agent 一起取消（含后台的）
         tools.on_interrupt.append(lambda: jobs.cancel_agents())
         tools.tools["task"] = subagents.tool()

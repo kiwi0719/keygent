@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from .. import kernel as k
+from .changes import call_diff
 from .humanize import _input_text, _short, steps as to_steps, title
 
 ERROR_NOTES = {
@@ -26,8 +27,9 @@ def _plain(line: str) -> str:
     return line.lstrip("#>-* ").replace("**", "").replace("`", "").strip()
 
 
-def waits(state: k.State, events: list[dict]) -> list[dict]:
-    """没解决的等待，变成人能读的：{id, kind, title, body, choices, call?}"""
+def waits(state: k.State, events: list[dict], root: str | None = None) -> list[dict]:
+    """没解决的等待，变成人能读的：{id, kind, title, body, choices, call?}
+    给了 root（任务的工作目录）：改文件的审批多一个 diff（按磁盘现状和参数算）。"""
     inputs = {e["id"]: e for e in events if e["type"] == "InputReceived"}
     started = {e["wait_id"]: e for e in events if e["type"] == "WaitStarted"}
     out = []
@@ -48,6 +50,7 @@ def waits(state: k.State, events: list[dict]) -> list[dict]:
                 item.update(kind="approval", title=title(name, args), body=(p.get("reason", "") + note).strip(),
                             choices=choices, call={"id": call.get("id"), "name": name, "args": args},
                             from_agent=p["sub"])
+                _diff(item, name, args, root)
         elif w.kind == "stuck":
             item.update(kind="stuck", title="它好像卡住了", body=p.get("reason", ""), choices=CHOICES["stuck"])
         elif w.kind == "question":                  # ask_user：问题本身就是标题，选项单独给
@@ -60,12 +63,24 @@ def waits(state: k.State, events: list[dict]) -> list[dict]:
                 (["edit"] if args else [])
             item.update(kind="approval", title=title(name, args), body=p.get("reason", ""), choices=choices,
                         call={"id": p["call_id"], "name": name, "args": args})
+            _diff(item, name, args, root)
         else:
             src = inputs.get(p.get("input_id"), {})
             item.update(kind="input", title="有一条外部输入待确认", body=_input_text(src) or p.get("reason", ""),
                         choices=CHOICES["input"])
         out.append(item)
     return sorted(out, key=lambda x: x["seq"])
+
+
+def _diff(item: dict, name: str, args: dict, root: str | None) -> None:
+    if root is None or name not in ("edit_file", "write_file"):
+        return
+    try:
+        d = call_diff(name, args, root)
+    except (OSError, ValueError):
+        d = ""
+    if d:
+        item["diff"] = d
 
 
 def summarize(events: list[dict], state: k.State | None = None) -> dict:

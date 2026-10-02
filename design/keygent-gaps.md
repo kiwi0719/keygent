@@ -1,0 +1,172 @@
+# Keygent 补缺：后端有、界面没有的那些
+
+草案 v1 · 2026-10-03
+
+## 〇、为什么做、照什么做
+
+用户要求（2026-10-03）：把 Keygent 和 weaverd 对照一遍，后端能做、界面上看不到或管不了的都补上；界面照宣传视频（`video/`）里已经有的样子来。
+
+视频里定下的样子（这一份所有新界面都照它）：
+
+- **一张白卡片一件事**：圆角 10、细描边、表头一行小字（左：是什么，右：数字），卡片里一行一项。
+- **一行 = 记号 + 动作 + 对象**：动作是一两个字（读 / 搜 / 跑 / 改 / 等），对象用等宽字；右边只在要说话时才有字（时间、`+9 -1`、`↺ 撤销`）。
+- **颜色只有三种意思**：绿 = 好了 / 在跑，琥珀 = 等你，红 = 出错。加了几行用绿，删了几行用红。
+- **每个动作一个键，键写在旁边**：`Kbd` 小方块挨着文字；底栏一行写着现在能按什么。
+- **胶囊下面的小卡片**（视频 0:12）：任务交出去后面板缩回菜单栏，胶囊下面浮出一张小卡，列着它在做的几步，你接着写自己的代码。
+
+## 一、改了哪些文件、看 diff、撤销（缺口 1 + 3）
+
+视频 0:19 的结果卡底部就有一行：`tests/conftest.py  +9 -1        ↺ 撤销`。照这个做。
+
+### 后端
+
+- **撤销日志补记改后的内容**：`UndoLog.record` 多存一份 `after_blob`（BlobStore 按内容去重，不费空间）。老记录没有它时用磁盘上的现状（哈希对得上才用）。
+- **子 Agent 的改动记在主任务名下**：`SubAgents` 现在用会话名 `ledger` 记撤销，和主任务的 `<任务 id>` 对不上（所有任务的子 Agent 改动混在一个文件里）。改成传入主任务的撤销会话名。
+- `GET /v1/tasks/{id}` 多一个字段 **`changes`**：按文件汇总这个任务改过的文件
+  `[{"path": "/abs/tests/conftest.py", "rel": "tests/conftest.py", "added": 9, "removed": 1, "created": false, "undone": false, "can_undo": true, "why": ""}]`
+  - `created`：这个任务新建的文件；`undone`：已经撤销；`can_undo: false` 时 `why` 写原因（“之后又被改过”“文件被删了”）。
+- `GET /v1/tasks/{id}/changes?path=…` → `{"path", "rel", "diff": "统一 diff 文本"}`：这个文件从任务第一次改之前 → 最后一次改之后（上下文 3 行，最多 400 行，超出写“……还有 N 行”）。
+- `POST /v1/tasks/{id}/undo` `{"path": "…"}` → 把这个文件恢复到任务改它之前（按倒序一次次撤销，中途发现被别人改过就停，回 409 说明）。成功回新的 `changes`。
+  - 撤销后往账本里记一条**背景输入**（`source: context`，不开启新的一轮）：“用户撤销了你对 X 的改动，文件已恢复到你改之前”，模型下一轮能看到。步骤里显示成一条 note：“你撤销了 X 的改动”。
+- **审批里的 diff**：`edit_file` / `write_file` 的审批（写工作目录外、子 Agent 升上来的）多一个 `diff` 字段，按磁盘上的现状和参数算出来的统一 diff。
+- **步骤里的 diff**：`edit_file` / `write_file` 那一步多一个 `diff`（从参数算：old_string → new_string；write_file 全是加的行，最多 200 行）。
+
+### 界面
+
+- **结果卡底部**：一行一个改过的文件 `rel  +9 -1   ↺ 撤销`；超过 3 个折成“还有 N 个文件”。⌘D 打开 diff（只有一个文件时直接打开；多个时打开第一个，↑↓ 换文件），⌘Z 撤销选中的那个文件（底栏变成“再按一次 ⌘Z 撤销 conftest.py”，按别的键取消）。已撤销的行变灰、删除线、右边写“已撤销”。
+- **diff 视图**（`DiffView`）：等宽字，行号两列，加的行浅绿底、删的行浅红底，`@@` 段落头灰字。放在过程面板右边（选中改文件那一步时）、审批卡里（代替原来的 JSON）、结果卡的 ⌘D 弹层里。
+- 审批卡里的 diff 默认最多 12 行，空格展开。
+
+## 二、todo 清单一直看得见（缺口 2）
+
+### 后端
+
+`GET /v1/tasks/{id}` 多一个字段 **`todos`**：`[{"content", "status"}]`，就是内核 fold 出来的当前清单（最近一次成功的 `todo_write`）；没有清单时是空数组。
+
+### 界面
+
+- **任务页**：结果卡（或“进行中”卡）上面一张“清单 2/5”卡：一行一项，`✓` 绿勾（完成）、转圈（正在做）、空圈（没做）、删除线（不做了）。全部做完、这一轮也结束了，就折成一行“清单 5/5 · 全部完成”，空格展开。
+- **胶囊下的小卡**（视频 0:12 那张）：任务交出去、面板收起后，胶囊下面浮出一张小卡 4 秒；鼠标停在胶囊上时也出来。内容：任务名 + “在后台跑”，下面有清单就列清单（最多 5 项），没有就列最近 3 步。不抢键盘焦点、不挡点击（只是看）。等你 / 出错时卡片里写“⌘⇧空格 去处理”。
+
+## 三、“总是允许”和信任过的项目，能看能撤（缺口 4）
+
+“总是允许”按任务记（写在那个任务的账本里，设计见 write-tools.md），信任按项目记（`trusted-skills.json`、`trusted-agents.json`、`trusted-mcp.json`、`.trust-denied.json`）。
+
+### 后端
+
+- 撤销“总是允许”：账本不能改，记在任务的 `meta.json`：`extra.revoked = ["npm test", …]`。`PermissionPolicy` 多一个 `revoked` 回调，`always_allowed(state) - revoked`。之后同样的命令重新问你；你再点一次“总是允许”就从 `revoked` 里去掉。
+- `GET /v1/settings/permissions` →
+  ```json
+  {"rules": [{"task": "id", "task_title": "…", "key": "npm test", "kind": "bash"|"mcp", "ts": 1759…}],
+   "projects": [{"root": "/Users/…/shop-api", "what": ["skill", "子 Agent 类型", "MCP 服务器"], "state": "trusted"|"denied"}],
+   "builtin": ["工作目录里读写文件：直接放行（改了能撤销）", …]}
+  ```
+- `DELETE /v1/settings/permissions/rules` `{"task", "key"}` → 撤销一条。
+- `DELETE /v1/settings/permissions/projects` `{"root"}` → 不再信任（或不再拒绝）这个项目：从各个信任文件里删掉，下一个任务开始时会重新问。
+
+### 界面
+
+设置页多一页 **权限**（模型 · MCP · Skills · 权限 · 记忆，⌘[ ⌘] 切换）：
+
+```
+┌─ 设置 ───────────────────────────────────────────────┐
+│ 模型  MCP  Skills  [ 权限 ]  记忆            ⌘[ ⌘] 切换 │
+├────────────────────────────────────────────────────┤
+│ 总是允许                                              │
+│ ⌘1  跑  npm test           修复登录测试 · 2 小时前        │
+│ ⌘2  MCP github:create_issue  整理 issue · 昨天          │
+│ 信任的项目                                             │
+│ ⌘3  ~/code/shop-api   skill、MCP 服务器    信任           │
+│ 一直是这样（改不了）                                     │
+│     工作目录里读写文件：直接放行（改了能撤销）……             │
+├────────────────────────────────────────────────────┤
+│ ↑↓ 选  ⌘⌫ 撤销  esc 关闭                                │
+└────────────────────────────────────────────────────┘
+```
+
+⌘⌫ 按两次确认（同 MCP 页的删除）。
+
+## 四、记忆能看、能改、能删（缺口 5）
+
+### 后端
+
+- `GET /v1/settings/memory` → `{"scopes": [{"scope": "user", "root": "", "label": "所有任务", "items": [{"name", "type", "description", "path"}]}, {"scope": "project", "root": "/…/shop-api", "label": "shop-api", "items": […]}]}`
+  - 项目级：最近任务（含归档）用过的工作目录里，有 `.weaver/memory/` 的那些。
+- `GET /v1/settings/memory/{name}?scope=user|project&root=…` → `{"name", "text"}`（整个文件，带 frontmatter）
+- `PUT` 同上 `{"text"}` → 保存（frontmatter 里的 type、description 必填，过 `memory.scan`：像密钥、像注入的拒绝；旧版本归档，重建索引）
+- `DELETE` 同上 → 归档（同 forget）
+
+### 界面
+
+设置页 **记忆** 页：按范围分组（“所有任务”“shop-api”），一行一条：类型小标签（偏好 / 纠正 / 项目 / 资料）+ 名字 + 一句话说明。↵ 打开编辑器（同 Skills 页），⌘↵ 保存，⌘⌫ 删除（两次确认），⌘N 新建（预填 frontmatter）。
+
+任务里“记住了 2 条”那一步：步骤详情里列出这几条的名字，⌘M 跳到记忆页。
+
+## 五、子 Agent 点得进去（缺口 6）
+
+### 后端
+
+- 步骤：`task` 那一步多一个 `sub`（子账本的会话名，`ledger--xxxx`），从 `ActionStarted` 之后子账本里 `parent_id` 对上的那个找；后台子 Agent 的 `jobs` 项也多一个 `sub`。
+- `GET /v1/tasks/{id}/agents/{sub}` → `{"sub", "title", "status", "steps": [...], "final", "usage": {"tokens", "steps"}}`：子账本翻成步骤，和主任务同一套翻译。
+- 搜索结果里 `sub` 不为空：App 打开主任务后直接进这个子 Agent，定位到 `seq`。
+
+### 界面
+
+- 过程面板里选中“派子 Agent”那一步，右边详情多一行“↵ 看它的过程”；后台那一条（JobsStrip）也能点。
+- 进去后是一张和过程面板一样的卡（左边步骤列表、右边详情），表头“子 Agent · 查文档 · 12 步”，esc 回主任务。子 Agent 在跑时跟着刷新（事件流里子账本的事件没有单独推，App 每 2 秒拉一次，只在这一屏开着时）。
+
+## 六、归档能回来（缺口 7）
+
+### 后端
+
+- `GET /v1/tasks?archived=1` → 归档的任务（`.archive/<id>-<时间>/`），摘要格式同列表，多一个 `archived: true`、`archived_at`。同一个 id 归档过多次（恢复后又归档）取最新的。
+- `GET /v1/tasks/{id}?archived=1` → 只读详情。
+- `POST /v1/tasks/{id}/restore` → 搬回 `tasks/<id>/`；回摘要，并推一个 `task` 事件。已经有同 id 的任务（不应该发生）→ 409。
+
+### 界面
+
+- 启动器最近任务的最底下多一行“已归档 · N 个 →”（⌘⇧A 直接去）。
+- 归档列表和最近任务长得一样（窗口式、⌘数字），↵ 打开只读的任务页：顶上一条灰色横条“已归档 · ⌘R 恢复”，输入框换成这句话。⌘R 恢复后变成普通任务页。
+- 搜索（`?` 开头）带上归档的结果，标“已归档”，↵ 同样打开只读页。
+
+## 七、MCP 第二期剩下的（缺口 8）
+
+按 [mcp2.md](mcp2.md) 第二到第七节做，这里只记界面怎么照视频的样子：
+
+- **服务器向你提问（elicit）**：等你的卡片（琥珀底）里一行一个字段：标签在左、输入在右；布尔是 `[空格]` 切换的小方块，枚举是 `⌘1 ⌘2 …` 的选项行（同问你卡）。表单上方一行小字“github 在要信息；不要在这里填密码”。按钮：`不给 ⌘⌫`、`交上去 ⌘↵`、`取消这次调用`。网址那种：显示网址，`⌘O 打开`，`好了 ⌘↵`。
+- **借用模型（sampling）**：普通审批卡，标题“github 想借用模型”，正文是它要发的内容（前 500 字，等宽小字），按钮同审批（放行 / 先不 / 总是允许 github）。
+- **prompts**：启动器里第一个字打 `/`：下面的最近任务换成 prompt 列表（窗口式，`/github:review-pr  审查一个 PR`），继续打字筛选，↵ 选中。有参数时输入框下面一行一个参数（必填标 `*`），Tab 换行，↵ 交出去。
+- **图片**：工具结果里的图片给模型看；步骤详情里“得到”下面显示缩略图。
+
+## 八、结论里的图片
+
+`MarkdownView` 认 `![说明](地址)`：本机路径（相对路径按任务的工作目录算）、`file://`、`http(s)://`。图片按卡片宽度缩放，最高 320；点一下用预览打开。加载失败显示“[图片：说明]”。
+
+## 九、接口变更汇总（api.md v1.9）
+
+| 接口 | 变化 |
+|---|---|
+| `GET /v1/tasks/{id}` | 多 `todos`、`changes`；步骤多 `diff`（改文件）、`sub`（子 Agent）；`jobs` 项多 `sub` |
+| `GET /v1/tasks/{id}/changes?path=` | 新：一个文件的 diff |
+| `POST /v1/tasks/{id}/undo` | 新：撤销一个文件的改动 |
+| `GET /v1/tasks/{id}/agents/{sub}` | 新：子 Agent 的过程 |
+| `GET /v1/tasks?archived=1`、`GET /v1/tasks/{id}?archived=1` | 新：归档的任务 |
+| `POST /v1/tasks/{id}/restore` | 新：恢复归档 |
+| 等待 | 审批多 `diff`；新 `kind: "elicit"`（`fields`、`mode`、`url`、`server`）；sampling 是 `approval`（`call.name: "sampling"`） |
+| `GET/DELETE /v1/settings/permissions…` | 新：权限页 |
+| `GET/PUT/DELETE /v1/settings/memory…` | 新：记忆页 |
+| `GET /v1/prompts?workdir=`、`POST /v1/tasks` 的 `prompt` | 新：mcp2 第四节 |
+
+## 十、实现顺序
+
+| 步 | 内容 |
+|---|---|
+| 1 | 后端：changes / diff / undo、todos、子 Agent 步骤和接口、归档列表和恢复（带测试） |
+| 2 | 后端：权限页、记忆页接口（带测试） |
+| 3 | App：DiffView、结果卡改动行、撤销、清单卡、胶囊小卡、子 Agent 过程、归档、权限页、记忆页、Markdown 图片 |
+| 4 | 后端 mcp2 第二到第七步（带测试），App：提问表单、借模型、`/` prompts、图片 |
+| 5 | 隔离实例实测，每屏截图；api.md v1.9；README |
+
+## 进度
+
+（实现时补）

@@ -144,6 +144,10 @@ class PermissionPolicy(Policy):
         self.yes = yes
         self.ask_user = ask_user
         self.mcp = mcp                          # weaver.mcp.tools.McpTools：MCP 工具按只读标记和 trust 配置决定
+        self.revoked = lambda: set()            # 用户在设置页撤销过的“总是允许”（常驻服务从任务的 meta.json 读）
+
+    def _always(self, state: State) -> set[str]:
+        return always_allowed(state) - self.revoked()
 
     def _inside(self, path: str) -> tuple[bool, Path]:
         p = Path(path).expanduser()
@@ -174,7 +178,7 @@ class PermissionPolicy(Policy):
         if name in SAFE_TOOLS:
             return "allow", ""
         if self.mcp is not None and (name.startswith("mcp__") or name.startswith("mcp_")):
-            if self.mcp.rule(name, args) == "allow" or mcp_key(name, args) in always_allowed(state):
+            if self.mcp.rule(name, args) == "allow" or mcp_key(name, args) in self._always(state):
                 return "allow", ""
             return "ask", "要调用 MCP 工具（服务器没标只读，可能有副作用）"
         if name == "bash":
@@ -184,7 +188,7 @@ class PermissionPolicy(Policy):
                 return "deny", f"命令里有{danger}，这类操作不允许 Agent 执行，请用户自己来"
             if is_readonly_command(command):
                 return "allow", ""
-            if command_prefix(command) in always_allowed(state):
+            if command_prefix(command) in self._always(state):
                 return "allow", ""
             return "ask", "要执行命令"
         return "ask", f"未知工具 {name}"

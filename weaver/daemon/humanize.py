@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 
 from ..kernel import ANSWERED
+from .changes import edit_diff
 
 OUT_LEN = 300
 ARG_LEN = 60
@@ -84,6 +85,15 @@ def title(name: str, args: dict | None) -> str:
     return f"调用 {name}"
 
 
+def _extras(step: dict, name: str, args, sub: str) -> None:
+    if name in ("edit_file", "write_file"):
+        d = edit_diff(name, args if isinstance(args, dict) else {})
+        if d:
+            step["diff"] = d
+    if name == "task" and sub:
+        step["sub"] = sub
+
+
 def _synthetic_status(output: str) -> str:
     if "已取消" in output or "取消" in output[:20]:
         return "cancelled"
@@ -118,8 +128,10 @@ def _user_said(ev: dict) -> tuple[str, list[str]]:
     return "\n".join(text), files
 
 
-def steps(events: list[dict]) -> list[dict]:
-    """步骤：{kind: you/agent/step, seq, ts, title, text, tool, out, why, status}"""
+def steps(events: list[dict], subs: dict[str, str] | None = None) -> list[dict]:
+    """步骤：{kind: you/agent/step, seq, ts, title, text, tool, out, why, status}
+    改文件的那一步多一个 diff（从参数算）；派子 Agent 的那一步多一个 sub（子账本，subs：调用 id → 会话名）。"""
+    subs = subs or {}
     out: list[dict] = []
     inputs: dict[str, dict] = {}
     by_call: dict[str, dict] = {}
@@ -141,6 +153,9 @@ def steps(events: list[dict]) -> list[dict]:
                 add("step", ev, title=f"Weaver 提醒：{_short(first, 50)}", text=_input_text(ev), status="note")
             elif src == "system":
                 add("step", ev, title=_short(_input_text(ev).split("\n")[0], 60), text=_input_text(ev), status="note")
+            elif src == "context" and ev.get("context_kind") == "undo":
+                add("step", ev, title=f"你撤销了 {ev.get('rel') or '文件'} 的改动", text=_input_text(ev), status="note",
+                    tool="undo")
         elif t == "InputJudged":
             src = inputs.get(ev["input_id"], {})
             if ev["verdict"] == "accept" and src.get("source") in ("user", "trigger"):
@@ -168,6 +183,7 @@ def steps(events: list[dict]) -> list[dict]:
                 by_call[c["id"]] = add("step", ev, title=title(c.get("name", "?"), c.get("args")),
                                        tool=c.get("name", ""), why=why, status="running",
                                        text=json.dumps(c.get("args"), ensure_ascii=False) if c.get("args") else "")
+                _extras(by_call[c["id"]], c.get("name", ""), c.get("args"), subs.get(c["id"], ""))
         elif t == "ActionCompleted" and ev["kind"] == "compact":
             o = ev.get("output") or {}
             if o.get("mode") in ("trim", "summary"):
@@ -188,6 +204,7 @@ def steps(events: list[dict]) -> list[dict]:
             if step is not None and call.get("edited_from") is not None:     # 用户改过参数：按实际执行的显示
                 step["title"] = title(call.get("name", "?"), call.get("args")) + "（你改过参数）"
                 step["text"] = json.dumps(call.get("args"), ensure_ascii=False)
+                _extras(step, call.get("name", ""), call.get("args"), step.get("sub", ""))
         elif t == "ActionCompleted":
             step = by_call.get(ev["action_id"])
             if step is None:

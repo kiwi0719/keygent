@@ -17,10 +17,16 @@ from typing import Callable
 from .. import kernel as k
 from ..errors import BadRequest, Conflict, NotFound  # noqa: F401  （接口层从这里导入）
 from ..permissions import command_prefix, mcp_key
+from .changes import Changes
 from .status import summarize, waits as list_waits
-from .tasks import TaskMeta, TaskStore
+from .tasks import LEDGER, TaskMeta, TaskStore
 
 log = logging.getLogger("weaverd")
+
+
+def steps_of(events: list[dict], subs: dict[str, str]) -> list[dict]:
+    from .humanize import steps
+    return steps(events, subs)
 MAX_RUNNING = 4                                  # 默认值；weaverd 启动时在读了 .env 之后看 WEAVER_MAX_RUNNING
 
 
@@ -38,6 +44,8 @@ class TaskManager:
     def __init__(self, store: TaskStore, factory: Factory, max_running: int = MAX_RUNNING, uploads=None):
         self.store, self.factory, self.uploads = store, factory, uploads
         self.corpus = None                         # 跨任务搜索（weaver/corpus.py），给 /v1/search 用
+        self.blobs = getattr(uploads, "blobs", None)   # 撤销日志里的原文（和附件同一个 BlobStore）
+        self._sub_links: dict[Path, dict[str, str]] = {}   # 任务目录 → {子账本文件名: 派它的 task 调用 id}
         self.max_running = max(1, max_running)
         self._pool = ThreadPoolExecutor(self.max_running, thread_name_prefix="weaver-task")
         self._lock = threading.RLock()
@@ -341,7 +349,8 @@ class TaskManager:
     def task_waits(self, task_id: str, events: list[dict] | None = None, state=None) -> list[dict]:
         """这个任务里在等你的事：账本里的等待 + 信任确认。"""
         events = self.events(task_id) if events is None else events
-        items = list_waits(state or k.fold(events), events)
+        meta = self.store.get(task_id)
+        items = list_waits(state or k.fold(events), events, root=meta.workdir if meta else None)
         trust = self._trust_item(task_id)
         return items + ([trust] if trust else [])
 
@@ -387,6 +396,8 @@ class TaskManager:
             if decision == "answer" and not note.strip():
                 raise BadRequest("回答不能为空；不想回答就选 skip，让它自己定")
             value = self._value(item, decision, note)
+            if value.get("always"):                  # 撤销过又点了“总是允许”：重新生效
+                self._set_revoked(task_id, value["always"], False)
             if args is not None:
                 if "edit" not in item["choices"]:
                     raise BadRequest("这件等待不能改参数")
@@ -464,10 +475,13 @@ class TaskManager:
         state = k.fold(events)
         s = summarize(events, state)
         r = state.run
-        return {"task": self.summary(task_id, meta), "steps": steps(events),
+        return {"task": self.summary(task_id, meta), "steps": steps(events, self._subs(self.store.dir(task_id))),
                 "waiting": [{**w, "task": meta.id, "task_title": meta.title}
                             for w in self.task_waits(task_id, events, state)],
                 "final": s["final"],
+                "todos": [{"content": str(t.get("content", "")), "status": t.get("status", "pending")}
+                          for t in state.todos or [] if isinstance(t, dict)],
+                "changes": self._changes_summary(meta),
                 "usage": {"tokens": r.tokens if r else 0, "budget": meta.token_budget,
                           "steps": r.steps if r else 0, "max_steps": meta.max_steps,
                           "extract_tokens": sum(k.billable((e.get("output") or {}).get("usage") or {})
@@ -489,8 +503,227 @@ class TaskManager:
             except (OSError, ValueError):
                 return []
         return [{"id": j["id"], "kind": j.get("kind", "shell"), "title": j.get("command", ""),
-                 "status": j.get("status", "?"), "started": j.get("started", 0), "ended": j.get("ended")}
+                 "status": j.get("status", "?"), "started": j.get("started", 0), "ended": j.get("ended"),
+                 "sub": j.get("sub", "")}
                 for j in sorted(items, key=lambda j: j.get("started", 0))]
+
+    # ------------------------------------------------ 步骤（事件总线也用）
+
+    def _subs(self, d: Path) -> dict[str, str]:
+        """派子 Agent 的 task 调用 id → 子账本会话名。子账本每条事件都带 parent_id = “ledger:<调用 id>”。"""
+        links = self._sub_links.setdefault(d, {})
+        try:
+            files = [f for f in d.glob(f"{LEDGER}--*.jsonl")]
+        except OSError:
+            return {}
+        for f in files:
+            if f.name in links:
+                continue
+            try:
+                with f.open(encoding="utf-8") as fh:
+                    first = json.loads(fh.readline() or "{}")
+            except (OSError, ValueError):
+                continue
+            parent = str(first.get("parent_id") or "")
+            if ":" in parent:
+                links[f.name] = parent.split(":", 1)[1]
+        return {call: name[:-len(".jsonl")] for name, call in links.items()}
+
+    def steps(self, task_id: str, events: list[dict] | None = None) -> list[dict]:
+        from .humanize import steps
+        events = self.events(task_id) if events is None else events
+        return steps(events, self._subs(self.store.dir(task_id)))
+
+    # ------------------------------------------------ 改了哪些文件、diff、撤销
+
+    def _changes(self, meta: TaskMeta) -> Changes | None:
+        return Changes(meta.workdir, meta.id, self.blobs) if self.blobs is not None else None
+
+    def _changes_summary(self, meta: TaskMeta) -> list[dict]:
+        ch = self._changes(meta)
+        try:
+            return ch.summary() if ch else []
+        except (OSError, ValueError):
+            log.exception("读任务 %s 的撤销日志出错", meta.id)
+            return []
+
+    def file_diff(self, task_id: str, path: str, archived: bool = False) -> dict:
+        meta = self._meta(task_id, archived)
+        ch = self._changes(meta)
+        try:
+            if ch is None:
+                raise KeyError(path)
+            return ch.diff(path)
+        except KeyError:
+            raise NotFound(f"这个任务没改过 {path}") from None
+
+    def undo(self, task_id: str, path: str) -> list[dict]:
+        """把这个任务对一个文件的改动全部撤销；账本里记一条背景输入，模型下一轮知道。"""
+        with self._op(task_id) as r:
+            meta = self.store.get(task_id)
+            ch = self._changes(meta)
+            if ch is None:
+                raise BadRequest("这个服务不支持撤销")
+            try:
+                rel = ch.rel(path)
+                n = ch.undo(path)
+            except KeyError:
+                raise NotFound(f"这个任务没改过 {path}") from None
+            except (LookupError, RuntimeError) as e:
+                raise Conflict(str(e)) from None
+            r._append([r._event("InputReceived", source="context", author=None, context_kind="undo", rel=rel,
+                                content=[{"type": "text", "text":
+                                          f"用户撤销了你对 {rel} 的改动（{n} 次），文件已经恢复到你改之前的样子。"
+                                          "之后要用到这个文件时先重新 read_file。"}])])
+        self._emit_summary(task_id)
+        return self._changes_summary(self.store.get(task_id))
+
+    # ------------------------------------------------ 子 Agent
+
+    def agent(self, task_id: str, sub: str, archived: bool = False) -> dict:
+        """一个子 Agent 的过程：子账本翻成步骤，和主任务同一套翻译。"""
+        from .humanize import steps
+        if not sub.startswith(f"{LEDGER}--") or "/" in sub:
+            raise NotFound(f"没有这个子 Agent：{sub}")
+        d = self._dir(task_id, archived)
+        f = d / f"{sub}.jsonl"
+        if not f.exists():
+            raise NotFound(f"没有这个子 Agent：{sub}")
+        from ..stores import JsonlEventStore
+        events = (self.store.store(task_id) if not archived else JsonlEventStore(d)).load(sub)
+        state = k.fold(events)
+        s = summarize(events, state)
+        call = self._subs(d)
+        call_id = next((c for c, name in call.items() if name == sub), "")
+        parent = self.events(task_id) if not archived else JsonlEventStore(d).load(LEDGER)
+        title = ""
+        for e in parent:
+            if e["type"] == "ActionCompleted" and e.get("kind") == "model":
+                for p in (e.get("output") or {}).get("content") or []:
+                    if p.get("type") == "tool_call" and p.get("id") == call_id:
+                        title = str((p.get("args") or {}).get("description") or "")
+        status = s["status"] if s["status"] != "idle" else "running"
+        r = state.run
+        return {"sub": sub, "title": title or "子 Agent", "status": status, "steps": steps(events),
+                "final": s["final"], "usage": {"tokens": r.tokens if r else 0, "steps": r.steps if r else 0}}
+
+    # ------------------------------------------------ 归档
+
+    def _dir(self, task_id: str, archived: bool) -> Path:
+        if not archived:
+            if self.store.get(task_id) is None:
+                raise NotFound(f"没有这个任务：{task_id}")
+            return self.store.dir(task_id)
+        d = self.store.archived_dirs().get(task_id)
+        if d is None:
+            raise NotFound(f"没有这个归档的任务：{task_id}")
+        return d
+
+    def _meta(self, task_id: str, archived: bool) -> TaskMeta:
+        meta = self.store.archived_meta(self._dir(task_id, True)) if archived else self.store.get(task_id)
+        if meta is None:
+            raise NotFound(f"没有这个任务：{task_id}")
+        return meta
+
+    def archived(self) -> list[dict]:
+        out = []
+        for d in self.store.archived_dirs().values():
+            meta = self.store.archived_meta(d)
+            if meta is None:
+                continue
+            out.append(self._archived_summary(meta, d))
+        return sorted(out, key=lambda t: -t["archived_at"])
+
+    def _archived_summary(self, meta: TaskMeta, d: Path, events: list[dict] | None = None) -> dict:
+        from ..stores import JsonlEventStore
+        events = JsonlEventStore(d).load(LEDGER) if events is None else events
+        s = summarize(events)
+        ledger = d / f"{LEDGER}.jsonl"
+        try:
+            updated = ledger.stat().st_mtime
+        except OSError:
+            updated = meta.created
+        try:
+            at = time.mktime(time.strptime(d.name[-15:], "%Y%m%d-%H%M%S"))
+        except ValueError:
+            at = updated
+        status = s["status"] if s["status"] not in ("waiting", "running") else "cancelled"
+        return {"id": meta.id, "title": meta.title, "status": status, "note": s["note"],
+                "now": s["now"] if status == s["status"] else "已取消",
+                "created": meta.created, "updated": updated, "waiting": 0, "workdir": meta.workdir,
+                "archived": True, "archived_at": at}
+
+    def archived_detail(self, task_id: str) -> dict:
+        from ..stores import JsonlEventStore
+        d = self._dir(task_id, True)
+        meta = self._meta(task_id, True)
+        events = JsonlEventStore(d).load(LEDGER)
+        state = k.fold(events)
+        s = summarize(events, state)
+        r = state.run
+        return {"task": self._archived_summary(meta, d, events), "steps": steps_of(events, self._subs(d)),
+                "waiting": [], "final": s["final"],
+                "usage": {"tokens": r.tokens if r else 0, "budget": meta.token_budget,
+                          "steps": r.steps if r else 0, "max_steps": meta.max_steps},
+                "jobs": [], "todos": [{"content": str(t.get("content", "")), "status": t.get("status", "pending")}
+                                      for t in state.todos or [] if isinstance(t, dict)],
+                "changes": self._changes_summary(meta)}
+
+    def restore(self, task_id: str) -> dict:
+        with self._lock:
+            lock = self._op_locks.setdefault(task_id, threading.RLock())
+        with lock:
+            try:
+                self.store.restore(task_id)
+            except FileNotFoundError:
+                raise NotFound(f"没有这个归档的任务：{task_id}") from None
+            except FileExistsError as e:
+                raise Conflict(str(e)) from None
+            with self._lock:
+                self._gone.discard(task_id)
+                self._runners.pop(task_id, None)
+        self._emit_summary(task_id)
+        return self.summary(task_id)
+
+    # ------------------------------------------------ “总是允许”（设置 › 权限）
+
+    def always_rules(self) -> list[dict]:
+        """所有任务里还生效的“总是允许”：{task, task_title, key, kind, ts}。"""
+        from .tasks import revoked_keys
+        out = []
+        for meta in self.store.list():
+            events = self.events(meta.id)
+            started = {e["wait_id"]: e for e in events if e["type"] == "WaitStarted"}
+            revoked = revoked_keys(self.store.dir(meta.id))
+            seen = set()
+            for e in events:
+                v = e.get("value") if e["type"] == "WaitResolved" else None
+                if not (isinstance(v, dict) and v.get("allow") and v.get("always")):
+                    continue
+                key = v["always"]
+                if key in revoked or key in seen:
+                    continue
+                seen.add(key)
+                p = (started.get(e["wait_id"]) or {}).get("payload") or {}
+                name = p.get("name") or ((p.get("call") or {}).get("name")) or ""
+                out.append({"task": meta.id, "task_title": meta.title, "key": key,
+                            "kind": "bash" if name == "bash" else "mcp", "ts": e.get("ts", 0)})
+        return sorted(out, key=lambda r: -r["ts"])
+
+    def revoke_rule(self, task_id: str, key: str) -> None:
+        if not any(r["task"] == task_id and r["key"] == key for r in self.always_rules()):
+            raise NotFound(f"没有这条“总是允许”：{key}")
+        self._set_revoked(task_id, key, True)
+
+    def _set_revoked(self, task_id: str, key: str, on: bool) -> None:
+        meta = self.store.get(task_id)
+        if meta is None:
+            return
+        keys = [x for x in meta.extra.get("revoked") or [] if x != key] + ([key] if on else [])
+        if keys == list(meta.extra.get("revoked") or []):
+            return
+        meta.extra["revoked"] = keys
+        self.store.save(meta)
 
     def status(self) -> dict:
         metas = {m.id: m for m in self.store.list()}
