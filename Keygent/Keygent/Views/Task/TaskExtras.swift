@@ -471,7 +471,7 @@ struct ElicitCard: View {
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(wait.mode == "url" ? "要你在网页上弄完，Weaver 看不到网页里的内容"
-                         : "\(wait.server ?? "服务器") 在要信息；不要在这里填密码")
+                         : "不要在这里填密码")
                         .font(KFont.sans(12))
                         .foregroundStyle(K.text3)
                 }
@@ -495,7 +495,7 @@ struct ElicitCard: View {
                 .buttonStyle(PressableStyle())
             } else {
                 FormCard(title: "要填 \(fields.count) 项", subtitle: "",
-                         trailing: "tab 换行 · 空格 是/否 · ⌘数字 选") {
+                         trailing: "") {
                     ForEach(Array(fields.enumerated()), id: \.element.id) { i, f in
                         FormRow(name: f.title, required: f.required, selected: i == cur, last: i == fields.count - 1,
                                 onTap: { store.task.elicitCur = i; store.elicitFocus(wait) }) {
@@ -506,9 +506,6 @@ struct ElicitCard: View {
             }
 
             HStack(spacing: 8) {
-                Text(wait.mode == "url" ? "弄完了按 ⌘↵" : "填的内容只交给服务器")
-                    .font(KFont.sans(12))
-                    .foregroundStyle(K.text3)
                 Spacer()
                 OutlineButton(title: "取消这次调用") { store.answer(wait, "cancel") }
                 OutlineButton(title: "不给 ⌫") { store.answer(wait, "decline") }

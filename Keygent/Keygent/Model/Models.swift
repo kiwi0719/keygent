@@ -149,7 +149,7 @@ extension WaitItem {
         case "input": base = "不是你发的输入，要不要接"
         case "trust": base = "不信任也不影响任务，只是这些先不加载"
         case "question": base = "它在等你回答"
-        case "elicit": base = "服务器在等你回答 · 填的内容只交给服务器，不给模型看"
+        case "elicit": base = "服务器在等你回答"
         default: base = ""
         }
         guard let a = fromAgent, !a.isEmpty else { return base }

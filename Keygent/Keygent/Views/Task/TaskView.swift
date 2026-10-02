@@ -168,7 +168,7 @@ struct TaskView: View {
             VStack(spacing: 0) {
                 if T.archived {
                     FooterBar {
-                        Text("已归档 · 只能看，恢复后才能接着说").foregroundStyle(K.text3)
+                        EmptyView()
                     } trailing: {
                         HStack(spacing: 14) {
                             if !store.taskChanges.isEmpty { HStack(spacing: 5) { Kbd("⌘D"); Text("看改动") } }
@@ -240,7 +240,6 @@ private struct ArchivedBanner: View {
             Image(systemName: "archivebox").font(.system(size: 12)).foregroundStyle(K.text3)
             Text("已归档" + (store.task.summary?.archivedAt.map { " · " + TimeText.relative($0) } ?? ""))
                 .font(KFont.sans(13, .medium))
-            Text("只能看").font(KFont.sans(12)).foregroundStyle(K.text3)
             Spacer()
             Button { if let id = store.task.id { store.restoreTask(id) } } label: {
                 HStack(spacing: 6) { Text("恢复"); Kbd("⌘R") }
