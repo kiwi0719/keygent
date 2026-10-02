@@ -228,10 +228,12 @@ private struct ReviewPane: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(PressableStyle())
-                    Text(w.title)
+                    Text(w.shownTitle)
                         .font(KFont.sans(16, .bold))
-                    if !w.body.isEmpty {
-                        Text(w.body).foregroundStyle(K.text2)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                    if !w.shownBody.isEmpty {
+                        Text(w.shownBody).foregroundStyle(K.text2)
                     }
                     if w.isQuestion {
                         ForEach(Array(w.questionOptions.enumerated()), id: \.offset) { i, o in
@@ -250,7 +252,7 @@ private struct ReviewPane: View {
                             .padding(.top, 4)
                     }
                     if let diff = w.diff, !diff.isEmpty {
-                        DiffCard(title: w.diffTitle, diff: diff, maxHeight: 220)
+                        DiffCard(title: "", diff: diff, maxHeight: 220)
                             .padding(.top, 4)
                     } else if let call = w.call {
                         SmallCaps(call.name)

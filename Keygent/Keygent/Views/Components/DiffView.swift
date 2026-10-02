@@ -151,19 +151,21 @@ struct DiffCard: View {
         let lines = DiffLine.parse(diff)
         let c = DiffLine.counts(lines)
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Text(title)
-                    .font(KFont.mono(12))
-                    .foregroundStyle(K.text2)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                ChangeCount(added: c.added, removed: c.removed, size: 11)
-                Spacer()
-                if let trailing { trailing }
+            if !title.isEmpty {         // 没标题（审批卡里，路径已经在卡片标题上）就不要表头
+                HStack(spacing: 10) {
+                    Text(title)
+                        .font(KFont.mono(12))
+                        .foregroundStyle(K.text2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    ChangeCount(added: c.added, removed: c.removed, size: 11)
+                    Spacer()
+                    if let trailing { trailing }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .overlay(alignment: .bottom) { HLine(color: K.line2) }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .overlay(alignment: .bottom) { HLine(color: K.line2) }
             ScrollView {
                 if lines.isEmpty {
                     Text("没有可显示的改动")

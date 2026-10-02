@@ -732,11 +732,12 @@ struct GateCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(wait.title)
+                    Text(wait.shownTitle)
                         .font(KFont.sans(14, .bold))
-                        .lineLimit(2)
-                    if !wait.body.isEmpty {
-                        Text(wait.body)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if !wait.shownBody.isEmpty {
+                        Text(wait.shownBody)
                             .font(KFont.sans(13))
                             .lineSpacing(3)
                     }
@@ -751,7 +752,7 @@ struct GateCard: View {
             }
 
             if let diff = wait.diff, !diff.isEmpty {
-                DiffCard(title: wait.diffTitle, diff: diff, maxHeight: 200)
+                DiffCard(title: "", diff: diff, maxHeight: 200)
             } else if let cmd = wait.callPreview, !wait.title.contains(cmd) {
                 Text(cmd)
                     .font(KFont.mono(12))

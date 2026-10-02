@@ -190,10 +190,16 @@ extension WaitItem {
     /// MCP 服务器想借用模型
     var isSampling: Bool { call?.name == "sampling" }
 
-    /// 改文件审批的 diff 卡标题：路径
-    var diffTitle: String {
-        if case .string(let p)? = call?.args["path"] { return Workspaces.short(p) }
-        return call?.name ?? ""
+    /// 卡片标题：路径缩短（家目录写成 ~）
+    var shownTitle: String {
+        if case .string(let p)? = call?.args["path"], p.hasPrefix("/") { return title.replacingOccurrences(of: p, with: Workspaces.short(p)) }
+        return title
+    }
+
+    /// 卡片正文：带 diff 的审批，路径已经在标题里了，原因只留前半句（“要写工作目录外…的路径”）
+    var shownBody: String {
+        guard diff?.isEmpty == false, let i = body.range(of: "：/") ?? body.range(of: "：~") else { return body }
+        return String(body[..<i.lowerBound])
     }
 
     /// bash 的命令 / 其它工具的参数预览
