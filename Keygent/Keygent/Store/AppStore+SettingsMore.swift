@@ -12,6 +12,8 @@ struct PermissionsPageState {
     var list: PermissionList? = nil
     var cur = 0
     var top = 0
+    /// 默认规则（改不了的那几条）展开了没有
+    var showBuiltin = false
 
     /// 能选中的行：先“总是允许”，再信任过的项目
     var rows: [Row] {
@@ -102,6 +104,7 @@ extension AppStore {
             }
             return true
         }
+        if e.plain, e.key == .space { settings?.permissions.showBuiltin.toggle(); return true }
         if e.key == .escape { settingsEscapeAll(); return true }
         return false
     }

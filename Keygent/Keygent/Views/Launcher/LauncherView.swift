@@ -19,9 +19,18 @@ struct LauncherView: View {
                 TextField(
                     "",
                     text: $store.launcher.query,
-                    prompt: Text(picked != nil ? "接着说，或者直接按 ↵ 打开" : "交代一件新事，或从下面选一个接着做；? 搜以前的任务 · / 用 MCP 提示词")
+                    prompt: Text(picked != nil ? "接着说，或者直接按 ↵ 打开" : "")
                         .foregroundColor(K.text4)
                 )
+                .overlay(alignment: .leading) {
+                    // 空着的时候轮流提示能做什么，一开始打字就停
+                    if picked == nil && store.launcher.query.isEmpty {
+                        RotatingHint(lines: ["交代一件新事", "或者从下面选一个接着做", "? 开头搜以前的任务", "/ 开头用 MCP 提示词"])
+                            .font(KFont.sans(20, .medium))
+                            .foregroundStyle(K.text4)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .textFieldStyle(.plain)
                 .font(KFont.sans(20, .medium))
                 .foregroundStyle(K.ink)
@@ -91,6 +100,7 @@ struct LauncherView: View {
     // MARK: 附件 / 继续 chips
 
     private var chips: some View {
+        HStack(alignment: .top, spacing: 8) {
         FlowLayout(spacing: 8, lineSpacing: 8) {
             if let t = store.pickedTask {
                 HStack(spacing: 8) {
@@ -127,6 +137,19 @@ struct LauncherView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .strokeBorder(K.dash, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+        }
+            Spacer(minLength: 8)
+            Button { store.openSettings() } label: {      // 设置的入口（⌘, 也行）
+                HStack(spacing: 5) {
+                    Kbd("⌘,")
+                    Text("设置")
+                }
+                .font(KFont.sans(12))
+                .foregroundStyle(K.text3)
+                .frame(height: 30)
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableStyle())
@@ -171,7 +194,7 @@ struct LauncherView: View {
 
         return VStack(spacing: 2) {
             HStack {
-                SectionLabel("最近任务 · 选一个接着做")
+                SectionLabel("最近任务")
                 Spacer()
                 Button { store.openArchived() } label: {
                     HStack(spacing: 5) {
@@ -225,6 +248,30 @@ struct LauncherView: View {
 }
 
 // MARK: - 子视图
+
+/// 输入框空着时的提示：几句话轮流往上滚，每句停 3 秒（开了“减少动态效果”就不动，只显示第一句）
+private struct RotatingHint: View {
+    let lines: [String]
+    @State private var i = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Text(lines[i % lines.count])
+                .id(i)
+                .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+                                        removal: .move(edge: .top).combined(with: .opacity)))
+        }
+        .clipped()
+        .task {
+            guard !reduceMotion, lines.count > 1 else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                withAnimation(.easeInOut(duration: 0.35)) { i += 1 }
+            }
+        }
+    }
+}
 
 /// 输入以 / 开头：MCP 服务器提供的提示词
 private struct PromptList: View {

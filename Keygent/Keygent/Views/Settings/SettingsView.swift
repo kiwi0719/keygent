@@ -103,7 +103,7 @@ struct SettingsView: View {
 
     private func note(_ s: SettingsState) -> String {
         switch s.tab {
-        case .model: return s.saving ? "正在保存…" : "OpenAI 或 Anthropic 兼容的接口都行；保存后 Weaver 会重启"
+        case .model: return s.saving ? "正在保存…" : "保存后 Weaver 会重启"
         case .mcp:
             switch s.mcp.mode {
             case .list: return "~/.weaver/mcp.json · 所有任务都能用"
@@ -118,7 +118,7 @@ struct SettingsView: View {
             if s.skills.editing == nil { return "~/.weaver/skills · 按需加载的说明书" }
             return s.skills.editable ? "开头 --- 之间写 name 和 description" : "只读"
         case .permissions:
-            return "「总是允许」只对点它的那个任务有效 · 撤销后下次会再问你"
+            return "撤销后下次会再问你"
         case .memory:
             if s.memory.editing == nil { return "新的记忆从下一个任务开始用上" }
             return "开头 --- 之间写 name、description、type"
@@ -151,8 +151,8 @@ struct SettingsView: View {
             }
             return s.skills.editable ? [KeyHint("⌘↵", "保存"), KeyHint("esc", "返回")] : [KeyHint("esc", "返回")]
         case .permissions:
-            return s.permissions.rows.isEmpty ? [KeyHint("esc", "关闭")]
-                : [KeyHint("↑↓", "选"), KeyHint("⌘⌫", "撤销"), KeyHint("esc", "关闭")]
+            return (s.permissions.rows.isEmpty ? [] : [KeyHint("↑↓", "选"), KeyHint("⌘⌫", "撤销")])
+                + [KeyHint("空格", "默认规则"), KeyHint("esc", "关闭")]
         case .memory:
             if s.memory.editing == nil {
                 return s.memory.rows.isEmpty ? [KeyHint("⌘N", "新建"), KeyHint("esc", "关闭")]
