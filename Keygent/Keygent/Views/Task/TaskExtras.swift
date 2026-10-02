@@ -365,7 +365,7 @@ struct AgentSheetView: View {
                     HStack(spacing: 5) { Kbd("↑↓"); Text("选步骤") }
                     HStack(spacing: 5) { Kbd("⌘1–5"); Text("眼前第几步") }
                     Spacer()
-                    HStack(spacing: 5) { Kbd("esc"); Text("回到主任务") }
+                    HStack(spacing: 5) { Kbd("esc"); Text("返回") }
                 }
                 .font(KFont.sans(12))
                 .foregroundStyle(K.text2)

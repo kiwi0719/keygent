@@ -19,7 +19,7 @@ struct TaskView: View {
             // 顶栏
             HStack(spacing: 12) {
                 // 输入中 Esc = 离开输入框，过程展开时 Esc = 收起过程，这两种情况返回按钮不标 esc
-                BackButton(label: "启动器", showEsc: !inInput && !T.proc) {
+                BackButton(label: "回到启动器", showEsc: !inInput && !T.proc) {
                     store.backToLauncherFromTask()
                 }
                 Text(T.summary?.title ?? "")

@@ -10,7 +10,7 @@ struct QueueView: View {
 
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                BackButton(label: Q.expanded ? "总览" : "关闭", showEsc: store.focusedField == nil) {
+                BackButton(label: Q.expanded ? "回到总览" : "关闭", showEsc: store.focusedField == nil) {
                     if Q.expanded { store.queue.expanded = false } else { store.hidePanel() }
                 }
                 Text(Q.expanded ? "逐件看" : "等你的事")
