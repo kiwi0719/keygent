@@ -16,10 +16,11 @@ extension AppStore {
 
     func loadTask(_ id: String) {
         if task.detail == nil { task.loading = true }
+        let archived = task.archived
         Task { @MainActor in
             defer { if task.id == id { task.loading = false } }
             do {
-                let d = try await client.task(id)
+                let d = try await client.task(id, archived: archived)
                 guard task.id == id else { return }
                 task.detail = d
                 task.summary = d.task
@@ -29,6 +30,7 @@ extension AppStore {
                     task.proc = true
                     task.focusSeq = nil
                 }
+                if archived { return }               // 归档的：只读，不进最近任务和等你的事
                 if let i = tasks.firstIndex(where: { $0.id == id }) { tasks[i] = d.task }
                 // 服务端的 waiting 是这个任务的全量；以它为准合并进全局列表
                 waits.removeAll { $0.task == id }
@@ -71,6 +73,15 @@ extension AppStore {
     var taskStepWindow: Range<Int> {
         let n = taskSteps.count
         return ListWindow.range(top: task.stepTop ?? n, count: n)
+    }
+
+    /// 选上一步 / 下一步，窗口跟着挪（选中的那步总在眼前）
+    func taskStepMove(_ d: Int) {
+        let n = taskSteps.count
+        guard n > 0 else { return }
+        let p = max(0, min(n - 1, taskCurrentStep + d))
+        task.step = p
+        task.stepTop = ListWindow.fit(p, top: taskStepWindow.lowerBound, count: n)
     }
 
     func taskStepScroll(_ d: Int) {
@@ -197,6 +208,13 @@ extension AppStore {
     func backToLauncherFromTask() {
         task.hintFor = nil
         task.optionPick = nil
+        armed = nil
+        if task.archived {                  // 从归档列表来的：回到归档列表
+            go(.launcher)
+            launcher.archivedMode = true
+            requestFocus(nil)
+            return
+        }
         go(.launcher)
         if let id = task.id, let i = tasks.firstIndex(where: { $0.id == id }) {
             let w = launcherWindow
@@ -208,7 +226,41 @@ extension AppStore {
 
     func taskKey(_ e: KeyEvent) -> Bool {
         if let r = questionKey(e, draft: task.draft) { return r }
+        // 改过的文件：⌘D 看 diff，⌘Z 撤销选中的那个（按两次）
+        if e.cmd, e.isChar("d") { openDiff(); return true }
+        if e.cmd, e.isChar("z"), !e.inInput { undoFile(taskChangeCurrent); return true }
+        if armed != nil, !(e.cmd && e.isChar("z")) { armed = nil }
+        if task.archived {
+            if e.cmd, e.isChar("r"), let id = task.id { restoreTask(id); return true }
+            if e.inInput || e.key == .tab || (e.key == .enter && e.plain && !task.proc) { return true }   // 只读：不能接着说
+        }
+        if e.cmd, e.isChar("m"), task.proc, taskSteps[safe: taskCurrentStep]?.isMemoryNote == true {
+            openSettings(tab: .memory)
+            return true
+        }
+        if task.proc, !e.inInput, e.key == .enter, e.plain, let sub = taskSteps[safe: taskCurrentStep]?.sub, !sub.isEmpty {
+            openAgent(sub)
+            return true
+        }
         if e.cmd, e.shift, e.key == .enter { openDetail(from: .task); return true }
+        // ⌘. 在输入框里也认（单行输入框用不上它）
+        if e.cmd, e.isChar(".") {
+            task.proc.toggle()
+            // 展开后滚到底：过程面板整个露出来（不然常被切掉半截）
+            if task.proc { DispatchQueue.main.async { [weak self] in self?.taskScrollBy(.greatestFiniteMagnitude) } }
+            return true
+        }
+        // 过程开着：↑↓ / ⌘↑↓ 选步骤，窗口跟着选中的那步走；⌘数字 = 眼前第几步。
+        // 输入框里也认 ⌘↑↓ 和 ⌘数字（单行输入框用不上它们），↑↓ 留给输入框
+        if task.proc, e.cmd, let d = e.digit {
+            let w = taskStepWindow
+            if d <= w.count { task.step = w.lowerBound + d - 1 }
+            return true
+        }
+        if task.proc, e.key == .up || e.key == .down, e.cmd || (e.plain && !e.inInput) {
+            taskStepMove(e.key == .down ? 1 : -1)
+            return true
+        }
         if e.cmd, e.key == .enter { taskPrimary(); return true }
         if e.cmd, e.key == .delete { taskCancel(); return true }
         if e.inInput {
@@ -220,20 +272,6 @@ extension AppStore {
             return false
         }
         if e.plain, e.key == .delete { taskSecondary(); return true }
-        if e.cmd, e.isChar(".") { task.proc.toggle(); return true }
-        let n = taskSteps.count
-        if task.proc, e.cmd, let d = e.digit {
-            let w = taskStepWindow
-            if d <= w.count { task.step = w.lowerBound + d - 1 }
-            return true
-        }
-        if task.proc, e.cmd, e.key == .up || e.key == .down {
-            guard n > 0 else { return true }
-            let p = max(0, min(n - 1, taskCurrentStep + (e.key == .down ? 1 : -1)))
-            task.step = p
-            task.stepTop = ListWindow.fit(p, top: taskStepWindow.lowerBound, count: n)
-            return true
-        }
         if e.cmd, e.isChar("c") { taskCopy(); return true }
         if e.plain, e.key == .space { taskToggleResult(); return true }
         if e.plain, e.key == .up || e.key == .down {

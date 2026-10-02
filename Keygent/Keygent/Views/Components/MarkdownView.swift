@@ -8,12 +8,78 @@ struct MarkdownView: View {
     let text: String
     var size: CGFloat = 13
     var spacing: CGFloat = 8
+    /// 图片的相对路径按这个目录算（任务的工作目录）
+    var baseDir: String? = nil
 
     var body: some View {
-        Markdown(MarkdownCJK.normalize(text))
+        Markdown(MarkdownCJK.normalize(text), imageBaseURL: baseDir.map { URL(fileURLWithPath: $0, isDirectory: true) })
             .markdownTheme(.keygent(size: size, spacing: spacing))
+            .markdownImageProvider(KeygentImageProvider())
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)
+    }
+}
+
+/// 结论里的 `![说明](地址)`：本机文件直接读，http(s) 异步下载；按卡片宽度缩放，最高 320，点一下用预览打开。
+struct KeygentImageProvider: ImageProvider {
+    func makeImage(url: URL?) -> some View {
+        MarkdownImage(url: url)
+    }
+}
+
+private struct MarkdownImage: View {
+    let url: URL?
+
+    var body: some View {
+        Group {
+            if let url, url.isFileURL {
+                if let img = NSImage(contentsOf: url) {
+                    framed(Image(nsImage: img).resizable(), size: img.size)
+                } else {
+                    failed
+                }
+            } else if let url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image): framed(image.resizable(), size: nil)
+                    case .failure: failed
+                    default:
+                        RoundedRectangle(cornerRadius: 6).fill(K.skeleton).frame(width: 160, height: 90)
+                    }
+                }
+            } else {
+                failed
+            }
+        }
+        .markdownMargin(top: 0, bottom: 8)
+    }
+
+    private func framed(_ image: Image, size: CGSize?) -> some View {
+        // 知道原图大小就算出贴合的尺寸，边框才能贴着图；不知道（网络图）就按上限等比缩放
+        let fit: CGSize? = size.flatMap { s in
+            guard s.width > 0, s.height > 0 else { return nil }
+            var w = min(s.width, 640), h = w * s.height / s.width
+            if h > 320 { h = 320; w = h * s.width / s.height }
+            return CGSize(width: w, height: h)
+        }
+        return image
+            .aspectRatio(contentMode: .fit)
+            .frame(width: fit?.width, height: fit?.height)
+            .frame(maxWidth: 640, maxHeight: 320, alignment: .leading)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(K.line2))
+            .onTapGesture { if let url { NSWorkspace.shared.open(url) } }
+            .onHover { if $0 { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+            .help(url?.isFileURL == true ? url!.path : url?.absoluteString ?? "")
+    }
+
+    private var failed: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "photo").font(.system(size: 11))
+            Text("[图片：\(url?.lastPathComponent ?? "打不开")]")
+        }
+        .font(KFont.sans(12))
+        .foregroundStyle(K.text4)
     }
 }
 

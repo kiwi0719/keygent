@@ -64,7 +64,7 @@ extension AppStore {
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard launcherSearchMode, launcherSearchTerms == q else { return }
             do {
-                let hits = try await client.search(q)
+                let hits = try await client.search(q, archived: true)
                 guard launcherSearchTerms == q else { return }
                 launcher.results = hits
                 launcher.searchedFor = q
@@ -78,8 +78,17 @@ extension AppStore {
     }
 
     func openSearchHit(_ h: SearchHit) {
-        openTask(id: h.task)
-        if h.sub.isEmpty { task.focusSeq = h.seq }   // 命中在子 Agent 的账本里：只打开任务
+        if h.archived {
+            openArchivedTask(TaskSummary(id: h.task, title: h.taskTitle, status: "done", note: "", now: "",
+                                         created: h.ts, updated: h.ts, waiting: 0, workdir: h.workdir, archived: true))
+        } else {
+            openTask(id: h.task)
+        }
+        if h.sub.isEmpty {
+            task.focusSeq = h.seq
+        } else {                                      // 命中在子 Agent 的账本里：打开主任务，直接进这个子 Agent
+            openAgent(h.sub, focusSeq: h.seq)
+        }
     }
 
     var resultWindow: Range<Int> { ListWindow.range(top: launcher.resultTop, count: launcher.results.count) }
@@ -347,6 +356,8 @@ extension AppStore {
         }
         if launcher.wsPicker { return workspaceKey(e) }
         if launcher.picker { return fileKey(e) }
+        if launcher.archivedMode { return archivedKey(e) }
+        if e.cmd, e.shift, e.isChar("a") { openArchived(); return true }
 
         if e.cmd, e.shift, e.isChar("o") { openFinder(); return true }
         if e.cmd, e.isChar("o") { openFilePicker(); return true }

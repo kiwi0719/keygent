@@ -38,6 +38,8 @@ struct LauncherView: View {
 
             if store.connection == .offline {
                 OfflineNotice()
+            } else if store.launcher.archivedMode {
+                ArchivedList()
             } else if store.launcherSearchMode {
                 SearchResults()
             } else {
@@ -171,6 +173,17 @@ struct LauncherView: View {
                 Text("⌘ + 数字 = 眼前第几条")
                     .font(KFont.sans(12))
                     .foregroundStyle(K.text4)
+                Button { store.openArchived() } label: {
+                    HStack(spacing: 5) {
+                        Kbd("⌘⇧A")
+                        Text("已归档")
+                    }
+                    .font(KFont.sans(12))
+                    .foregroundStyle(K.text3)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .padding(.leading, 10)
             }
             .padding(.horizontal, 8)
             .padding(.top, 4)
@@ -276,7 +289,7 @@ private struct SearchResults: View {
                                         .font(KFont.sans(14, .bold))
                                         .foregroundStyle(K.ink)
                                         .lineLimit(1)
-                                    Text(h.sub.isEmpty ? h.kind : "子 Agent · \(h.kind)")
+                                    Text((h.archived ? "已归档 · " : "") + (h.sub.isEmpty ? h.kind : "子 Agent · \(h.kind)"))
                                         .font(KFont.sans(11, .medium))
                                         .foregroundStyle(K.text3)
                                         .padding(.horizontal, 6)

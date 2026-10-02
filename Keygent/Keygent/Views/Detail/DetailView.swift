@@ -81,7 +81,7 @@ struct DetailView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
-                            MarkdownView(text: final, size: 15, spacing: 12)
+                            MarkdownView(text: final, size: 15, spacing: 12, baseDir: store.task.summary?.workdir)
                         }
                     }
                 } else if nodes.indices.contains(at) {

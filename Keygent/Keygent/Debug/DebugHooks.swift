@@ -46,7 +46,7 @@ enum DebugHooks {
                 NSLog("KGDEBUG key %@ handled=%d", cmd, store.handleKey(ev) ? 1 : 0)
                 return
             case _ where cmd == "settings" || cmd.hasPrefix("settings:"):    // settings | settings:mcp | settings:skills
-                let tabs: [String: SettingsTab] = ["model": .model, "mcp": .mcp, "skills": .skills]
+                let tabs: [String: SettingsTab] = ["model": .model, "mcp": .mcp, "skills": .skills, "permissions": .permissions, "memory": .memory]
                 store.openSettings(tab: tabs[String(cmd.dropFirst(9))])
             case _ where cmd.hasPrefix("settext:"):    // 往设置页当前的编辑器 / 输入框里写字（模拟打字、粘贴）
                 let text = String(cmd.dropFirst(8))
@@ -70,6 +70,8 @@ enum DebugHooks {
                     default: break
                     }
                 case .skills: store.settings?.skills.text = text
+                case .memory: store.settings?.memory.text = text
+                case .permissions: break
                 }
                 return
             case "settings-state":

@@ -13,6 +13,13 @@ struct TaskSummary: Codable, Identifiable, Equatable {
     var updated: Double
     var waiting: Int
     var workdir: String
+    /// 归档的任务（GET /v1/tasks?archived=1，api.md v1.9）
+    var archived: Bool?
+    var archivedAt: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, status, note, now, created, updated, waiting, workdir, archived, archivedAt = "archived_at"
+    }
 }
 
 struct Step: Codable, Equatable {
@@ -26,6 +33,10 @@ struct Step: Codable, Equatable {
     var out: String
     var why: String
     var status: String          // ok / running / waiting / denied / cancelled / interrupted / error / note
+    /// 改文件那一步：从参数算的统一 diff（api.md v1.9）
+    var diff: String?
+    /// 派子 Agent 那一步：子账本（GET /v1/tasks/{id}/agents/{sub}）
+    var sub: String?
 }
 
 struct WaitCall: Codable, Equatable {
@@ -49,9 +60,34 @@ struct WaitItem: Codable, Identifiable, Equatable {
     var fromAgent: String?
     /// question（ask_user 问你）的可选答案：0 个或 2~4 个（api.md v1.6）
     var options: [String]?
+    /// 改文件的审批：按磁盘现状和参数算的统一 diff（api.md v1.9）
+    var diff: String?
+    /// elicit（MCP 服务器向你提问，api.md v1.9）：哪个服务器、表单 / 网址
+    var server: String?
+    var mode: String?
+    var url: String?
+    var fields: [ElicitField]?
 
     enum CodingKeys: String, CodingKey {
-        case id, task, taskTitle = "task_title", seq, ts, kind, title, body, choices, call, fromAgent = "from_agent", options
+        case id, task, taskTitle = "task_title", seq, ts, kind, title, body, choices, call, fromAgent = "from_agent", options,
+             diff, server, mode, url, fields
+    }
+}
+
+/// MCP 服务器提问的一个字段（字符串 / 数字 / 布尔 / 单选）
+struct ElicitField: Codable, Equatable, Identifiable {
+    var name: String
+    var title: String
+    var description: String
+    var type: String            // string / number / integer / boolean / enum
+    var required: Bool
+    var options: [String]?
+    var defaultValue: JSONValue?
+
+    var id: String { name }
+
+    enum CodingKeys: String, CodingKey {
+        case name, title, description, type, required, options, defaultValue = "default"
     }
 }
 
@@ -63,6 +99,49 @@ struct JobInfo: Codable, Equatable, Identifiable {
     var status: String          // running / done / failed / killed
     var started: Double
     var ended: Double?
+    /// 后台子 Agent 的子账本
+    var sub: String?
+}
+
+/// 这个任务改过的一个文件（任务详情的 changes，api.md v1.9）
+struct FileChange: Codable, Equatable, Identifiable {
+    var path: String
+    var rel: String
+    var added: Int
+    var removed: Int
+    var created: Bool
+    var undone: Bool
+    var canUndo: Bool
+    var why: String
+
+    var id: String { path }
+
+    enum CodingKeys: String, CodingKey {
+        case path, rel, added, removed, created, undone, canUndo = "can_undo", why
+    }
+}
+
+struct FileDiff: Codable, Equatable {
+    var path: String
+    var rel: String
+    var diff: String
+    var why: String?
+}
+
+struct TodoItem: Codable, Equatable {
+    var content: String
+    var status: String          // pending / in_progress / completed / cancelled
+}
+
+/// 一个子 Agent 的过程（GET /v1/tasks/{id}/agents/{sub}）
+struct AgentDetail: Codable, Equatable {
+    struct Usage: Codable, Equatable { var tokens: Int; var steps: Int }
+    var sub: String
+    var title: String
+    var status: String
+    var steps: [Step]
+    var final: String
+    var usage: Usage
 }
 
 /// 搜索结果（GET /v1/search，api.md v1.4）
@@ -95,6 +174,9 @@ struct TaskDetail: Codable, Equatable {
     var usage: Usage
     /// 后台命令和后台子 Agent；旧版 weaverd 没有这个字段
     var jobs: [JobInfo]?
+    /// 当前 todo 清单、改过的文件（api.md v1.9）；旧版 weaverd 没有
+    var todos: [TodoItem]?
+    var changes: [FileChange]?
 
     struct Usage: Codable, Equatable {
         var tokens: Int

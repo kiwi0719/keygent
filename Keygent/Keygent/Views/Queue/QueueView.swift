@@ -243,7 +243,10 @@ private struct ReviewPane: View {
                                 .padding(.top, 4)
                         }
                     }
-                    if let call = w.call {
+                    if let diff = w.diff, !diff.isEmpty {
+                        DiffCard(title: w.diffTitle, diff: diff, maxHeight: 220)
+                            .padding(.top, 4)
+                    } else if let call = w.call {
                         SmallCaps(call.name)
                             .padding(.top, 4)
                         ScrollView {

@@ -84,10 +84,12 @@ extension AppStore {
     /// 窗口式列表（ListWindow）：滚轮一格挪一条，编号跟着重排。
     func handleScroll(rows: Int) {
         if settings != nil { settingsScroll(rows); return }
+        if agentView != nil { agentScroll(rows); return }
         switch route {
         case .launcher:
             if launcher.picker { fileScroll(rows) }
             else if launcher.wsPicker { wsScroll(rows) }
+            else if launcher.archivedMode { archScroll(rows) }
             else if launcherSearchMode { resultScroll(rows) }
             else if launcherFull { launcherScroll(rows) }
         case .queue where queue.expanded:

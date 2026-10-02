@@ -67,6 +67,12 @@ struct LauncherState {
     var resultTop = 0
     var searching = false
     var searchedFor = ""
+    /// ⌘⇧A 已归档：列表、选中第几条、窗口顶、正在读
+    var archivedMode = false
+    var archived: [TaskSummary] = []
+    var archPick = 0
+    var archTop = 0
+    var archLoading = false
 }
 
 struct TaskState {
@@ -94,6 +100,34 @@ struct TaskState {
     var resultOpen = false
     /// 问题卡里 ↑↓ 高亮的选项（下标）
     var optionPick: Int? = nil
+    /// 归档的任务：只读，⌘R 恢复
+    var archived = false
+    /// 改过的文件里选中第几个（⌘D 看 diff、⌘Z 撤销它）
+    var changePick = 0
+    /// 结果卡底部改过的文件太多时折起来，展开了没有
+    var changesOpen = false
+}
+
+/// ⌘D：一个任务改过的文件的 diff，↑↓ 换文件
+struct DiffSheetState {
+    var task: String
+    var archived: Bool
+    var files: [FileChange]
+    var cur: Int
+    var diffs: [String: FileDiff] = [:]
+    var error: String? = nil
+}
+
+/// 子 Agent 的过程（从过程面板「看它的过程」、后台条、搜索结果进来）
+struct AgentViewState {
+    var task: String
+    var sub: String
+    var archived: Bool
+    var detail: AgentDetail? = nil
+    var step: Int? = nil
+    var top: Int? = nil
+    var focusSeq: Int? = nil
+    var error: String? = nil
 }
 
 struct QueueState {
@@ -159,6 +193,10 @@ final class AppStore {
     var queue = QueueState()
     var detail = DetailState()
     var editor: ArgsEditorState? = nil
+    var diffSheet: DiffSheetState? = nil
+    var agentView: AgentViewState? = nil
+    /// 等第二次确认的操作（任务页）：“undo:路径”
+    var armed: String? = nil
     /// 设置页（AppStore+Settings）；面板收起时不清，切出去复制 key 再回来还在
     var settings: SettingsState? = nil
     /// 设置页上次停在哪个分页
@@ -204,6 +242,7 @@ final class AppStore {
     @ObservationIgnored private var statusWork: DispatchWorkItem?
     @ObservationIgnored private var detailWork: DispatchWorkItem?
     @ObservationIgnored private var offlineTimer: Timer?
+    @ObservationIgnored var agentTimer: Timer?
 
     var capsule: CapsuleState { connection == .offline ? .offline : CapsuleState(status) }
 
@@ -334,6 +373,10 @@ final class AppStore {
                 task.detail!.steps.append(step)
             }
             if step.kind == .agent { task.delta = "" }
+            // 清单变了、改了文件：拉一次详情拿 todos / changes（事件里不带）
+            if ["todo_write", "edit_file", "write_file", "task", "undo"].contains(step.tool), step.status != "running" {
+                reloadTaskSoon()
+            }
 
         case .delta(let tid, let text):
             guard tid == task.id else { return }
@@ -392,6 +435,8 @@ final class AppStore {
             case .model: requestFocus(.settingsRow(st.row))
             case .mcp: requestFocus(mcpFocus)
             case .skills: requestFocus(st.skills.editing != nil ? .settingsEditor : nil)
+            case .permissions: requestFocus(nil)
+            case .memory: requestFocus(st.memory.editing != nil ? .settingsEditor : nil)
             }
         } else if route == .launcher {
             requestFocus(.launcher)
@@ -408,12 +453,15 @@ final class AppStore {
         launcher.picker = false
         launcher.wsPicker = false
         editor = nil
+        armed = nil
     }
 
     func handleKey(_ e: KeyEvent) -> Bool {
         if settings != nil { return settingsKey(e) }
         if e.cmd, e.isChar(",") { openSettings(); return true }
         if editor != nil { return editorKey(e) }
+        if diffSheet != nil { return diffKey(e) }
+        if agentView != nil { return agentKey(e) }
         switch route {
         case .launcher: return launcherKey(e)
         case .task: return taskKey(e)

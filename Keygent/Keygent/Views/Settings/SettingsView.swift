@@ -14,6 +14,8 @@ struct SettingsView: View {
                     case .model: ModelPage()
                     case .mcp: McpPage()
                     case .skills: SkillsPage()
+                    case .permissions: PermissionsPage()
+                    case .memory: MemoryPage()
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -80,7 +82,8 @@ struct SettingsView: View {
             if let e = s.error {
                 Text(e).foregroundStyle(K.red).lineLimit(2)
             } else if let a = s.armed {
-                Text(a == "discard" ? "有改动没保存：再按一次 esc 放弃" : "再按一次 ⌘⌫ 删除 \(a.dropFirst("delete:".count))，按别的键取消")
+                Text(a == "discard" ? "有改动没保存：再按一次 esc 放弃"
+                     : "再按一次 ⌘⌫ \(s.tab == .permissions ? "撤销" : "删除") \(a.dropFirst("delete:".count))，按别的键取消")
                     .foregroundStyle(K.amber)
             } else {
                 Text(note(s)).foregroundStyle(K.text3).lineLimit(1)
@@ -114,6 +117,11 @@ struct SettingsView: View {
         case .skills:
             if s.skills.editing == nil { return "~/.weaver/skills · 按需加载的说明书" }
             return s.skills.editable ? "开头 --- 之间写 name 和 description" : "只读"
+        case .permissions:
+            return "「总是允许」只对点它的那个任务有效 · 撤销后下次会再问你"
+        case .memory:
+            if s.memory.editing == nil { return "新的记忆从下一个任务开始用上" }
+            return "开头 --- 之间写 name、description、type"
         }
     }
 
@@ -142,6 +150,15 @@ struct SettingsView: View {
                     : [KeyHint("↵", "打开"), KeyHint("⌘N", "新建"), KeyHint("⌘⌫", "删除"), KeyHint("esc", "关闭")]
             }
             return s.skills.editable ? [KeyHint("⌘↵", "保存"), KeyHint("esc", "返回")] : [KeyHint("esc", "返回")]
+        case .permissions:
+            return s.permissions.rows.isEmpty ? [KeyHint("esc", "关闭")]
+                : [KeyHint("↑↓", "选"), KeyHint("⌘⌫", "撤销"), KeyHint("esc", "关闭")]
+        case .memory:
+            if s.memory.editing == nil {
+                return s.memory.rows.isEmpty ? [KeyHint("⌘N", "新建"), KeyHint("esc", "关闭")]
+                    : [KeyHint("↵", "打开"), KeyHint("⌘N", "新建"), KeyHint("⌘⌫", "删除"), KeyHint("esc", "关闭")]
+            }
+            return [KeyHint("⌘↵", "保存"), KeyHint("esc", "返回")]
         }
     }
 }

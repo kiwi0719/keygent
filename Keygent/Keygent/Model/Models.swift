@@ -71,6 +71,11 @@ extension Step {
         return verb.count > 8 ? (t, "") : (verb, obj)
     }
 
+    /// 「记住了 N 条」「记住：…」这类步骤：可以跳到设置 › 记忆
+    var isMemoryNote: Bool {
+        ["remember", "forget"].contains(tool) || (status == "note" && title.hasPrefix("记住了"))
+    }
+
     /// 对象是命令或路径的，用等宽字
     var monoTitle: Bool { ["bash", "read_file", "write_file", "edit_file", "find_files", "grep"].contains(tool) }
 
@@ -172,6 +177,12 @@ extension WaitItem {
 
     /// 能一键放行的：信任确认不算（信任一个项目要你单独看过）
     var isBulkApprovable: Bool { choices.contains("allow") && kind != "trust" }
+
+    /// 改文件审批的 diff 卡标题：路径
+    var diffTitle: String {
+        if case .string(let p)? = call?.args["path"] { return Workspaces.short(p) }
+        return call?.name ?? ""
+    }
 
     /// bash 的命令 / 其它工具的参数预览
     var callPreview: String? {
