@@ -105,7 +105,7 @@ struct PeekView: View {
             if kind == .wait || kind == .error {
                 HStack(spacing: 5) {
                     Kbd("⌘⇧Space", size: 10)
-                    Text("去处理")
+                    Text("打开")
                 }
                 .font(KFont.sans(11))
                 .foregroundStyle(K.text3)

@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeys: [HotKey] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 只留一个 Keygent：新起的接管，旧的退出（不然两个面板、两个胶囊、⌥空格 呼出的可能是另一个）
+        // 只留一个 Keygent：新起的接管，旧的退出（不然两个面板、两个胶囊、⌘⇧空格 呼出的可能是另一个）
         let me = NSRunningApplication.current
         for old in NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
         where old.processIdentifier != me.processIdentifier {
@@ -40,22 +40,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 面板收着时来了新的等待 → 胶囊下的小卡多停一会儿
         store.onWaitWhileHidden = { [weak self] in self?.peek.show(for: 8) }
 
-        // ⌥空格：呼出启动器（⌘空格 是 Spotlight，留给系统）。隔离的调试实例（KEYGENT_DEBUG_NAME）不抢全局快捷键
+        // 唯一的全局热键 ⌘⇧空格：开着就收起，收着就呼出启动器（等你的那件事排在 ⌘1）。
+        // 隔离的调试实例（KEYGENT_DEBUG_NAME）不抢全局快捷键
         if ProcessInfo.processInfo.environment["KEYGENT_DEBUG_NAME"] == nil {
-        hotKeys.append(HotKey(keyCode: kVK_Space, modifiers: optionKey) { [weak self] in
-            guard let self else { return }
-            if self.panel.isVisible && self.store.route == .launcher {
-                self.panel.hide()
-            } else {
-                self.store.go(.launcher)
-                self.store.pinCapsuleTaskFirst()
-                self.panel.show()
-            }
-        })
-        // ⌘⇧空格：直接打开胶囊里的那件事
-        hotKeys.append(HotKey(keyCode: kVK_Space, modifiers: cmdKey | shiftKey) { [weak self] in
-            self?.openCapsuleTarget()
-        })
+            hotKeys.append(HotKey(keyCode: kVK_Space, modifiers: cmdKey | shiftKey) { [weak self] in
+                guard let self else { return }
+                if self.panel.isVisible {
+                    self.panel.hide()
+                } else {
+                    if self.store.settings == nil { self.store.go(.launcher) }
+                    self.store.pinCapsuleTaskFirst()
+                    self.panel.show()
+                }
+            })
         }
 
         #if DEBUG

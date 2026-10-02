@@ -33,7 +33,6 @@ struct PermissionsPage: View {
                                 .padding(.top, 4)
                         }
                     }
-                    builtin(p.list?.builtin ?? [], open: p.showBuiltin)
                 }
             }
             .padding(.horizontal, 12)
@@ -88,34 +87,5 @@ struct PermissionsPage: View {
                 .foregroundStyle(K.text3)
             }
         }
-    }
-
-    /// 改不了的默认规则：平时折成一行，空格或点一下展开
-    private func builtin(_ items: [String], open: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Button { store.settings?.permissions.showBuiltin.toggle() } label: {
-                HStack(spacing: 6) {
-                    SectionLabel("默认规则 · \(items.count) 条")
-                    Image(systemName: open ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9))
-                        .foregroundStyle(K.text4)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(PressableStyle())
-            if open {
-                ForEach(items, id: \.self) { t in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("·")
-                        Text(t)
-                    }
-                    .font(KFont.sans(12))
-                    .foregroundStyle(K.text3)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 14)
-        .padding(.bottom, 4)
     }
 }

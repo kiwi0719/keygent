@@ -151,8 +151,7 @@ struct SettingsView: View {
             }
             return s.skills.editable ? [KeyHint("⌘↵", "保存"), KeyHint("esc", "返回")] : [KeyHint("esc", "返回")]
         case .permissions:
-            return (s.permissions.rows.isEmpty ? [] : [KeyHint("↑↓", "选"), KeyHint("⌘⌫", "撤销")])
-                + [KeyHint("空格", "默认规则"), KeyHint("esc", "关闭")]
+            return (s.permissions.rows.isEmpty ? [] : [KeyHint("↑↓", "选"), KeyHint("⌘⌫", "撤销")]) + [KeyHint("esc", "关闭")]
         case .memory:
             if s.memory.editing == nil {
                 return s.memory.rows.isEmpty ? [KeyHint("⌘N", "新建"), KeyHint("esc", "关闭")]

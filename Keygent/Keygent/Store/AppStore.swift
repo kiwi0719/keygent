@@ -251,7 +251,7 @@ final class AppStore {
     /// 你按 esc 收起过的问题：不再自动弹
     @ObservationIgnored var dismissedQuestions: Set<String> = []
     @ObservationIgnored var bannerWork: DispatchWorkItem?
-    /// 横幅说的是哪个问题：点横幅 / ⌘⇧空格 直接去它
+    /// 横幅说的是哪个问题：点横幅直接去它
     @ObservationIgnored var bannerFor: WaitItem? = nil
     @ObservationIgnored var openFinder: () -> Void = {}
     @ObservationIgnored var openFolder: () -> Void = {}
@@ -495,7 +495,7 @@ final class AppStore {
 
     // MARK: 胶囊
 
-    /// 点胶囊 / ⌘⇧空格：直接打开胶囊里的那件事（多件等你 → ④，单个任务 → ③）。
+    /// 点胶囊：直接打开胶囊里的那件事（多件等你 → ④，单个任务 → ③）。
     func openCapsuleTarget() {
         switch capsule {
         case .waiting(let tid, _, let more, _):

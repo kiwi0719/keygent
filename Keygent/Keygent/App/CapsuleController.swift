@@ -76,8 +76,7 @@ final class CapsuleController: NSObject {
 
     private func showMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "打开启动器    ⌥空格", action: #selector(openLauncher), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "打开胶囊里的事    ⌘⇧空格", action: #selector(openTarget), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "打开启动器    ⌘⇧空格", action: #selector(openLauncher), keyEquivalent: "").target = self
         let q = menu.addItem(withTitle: "等你的事（\(store.waits.count)）", action: #selector(openQueue), keyEquivalent: "")
         q.target = self
         menu.addItem(.separator())
@@ -102,8 +101,6 @@ final class CapsuleController: NSObject {
         store.go(.launcher)
         onLauncher()
     }
-
-    @objc private func openTarget() { onOpen() }
 
     @objc private func openQueue() {
         store.openQueue()

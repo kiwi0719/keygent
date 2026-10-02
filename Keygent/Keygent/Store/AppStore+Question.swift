@@ -32,7 +32,7 @@ extension AppStore {
             return
         }
         if userBusy {
-            showBanner("\(w.taskTitle) 问你 · ⌘⇧空格 去回答", for: w)
+            showBanner("\(w.taskTitle) 问你 · 点这里回答", for: w)
             return
         }
         openQuestion(w)
@@ -77,7 +77,7 @@ extension AppStore {
         waits.first { $0.isQuestion && !dismissedQuestions.contains($0.id) }
     }
 
-    /// ⌘⇧空格 / 点横幅该去的问题：横幅上那个 → 没收起的 → 任何一个（收起的也算，这就是“随时回来”）
+    /// 点胶囊 / 点横幅该去的问题：横幅上那个 → 没收起的 → 任何一个（收起的也算，这就是“随时回来”）
     var questionTarget: WaitItem? {
         if let w = bannerFor, waits.contains(where: { $0.id == w.id }) { return w }
         return nextQuestion ?? waits.first { $0.isQuestion }

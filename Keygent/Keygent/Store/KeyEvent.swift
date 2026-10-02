@@ -45,6 +45,9 @@ struct KeyEvent {
         self.inInput = inInput
 
         let digits: [UInt16: Int] = [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
+        // 标点按物理键位认：开着中文输入法时系统给的是全角的「，」「【」「】」，⌘, ⌘[ ⌘] 会认不出来
+        let punct: [UInt16: Character] = [43: ",", 47: ".", 33: "[", 30: "]", 44: "/", 41: ";", 39: "'", 50: "`",
+                                          27: "-", 24: "=", 42: "\\"]
         switch ev.keyCode {
         case 36, 76: key = .enter
         case 53: key = .escape
@@ -58,6 +61,8 @@ struct KeyEvent {
         default:
             if let d = digits[ev.keyCode] {
                 key = .digit(d)
+            } else if let p = punct[ev.keyCode] {
+                key = .char(p)
             } else if let c = ev.charactersIgnoringModifiers?.lowercased().first {
                 key = .char(c)
             } else {

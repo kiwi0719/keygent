@@ -10,7 +10,7 @@
 
 **Hand a long task to a coding agent from a keystroke, and come back when it needs you.**
 
-Keygent is a macOS menu-bar app on top of **Weaver**, a local coding agent that runs as a background service (`weaverd`). Press <kbd>⌥ Space</kbd>, say what you want done in which folder, and go back to your work. The agent reads, edits and runs things in a sandbox; a capsule in the menu bar shows whether it is running, done, or waiting for you. Approvals, questions and errors from every task land in one queue you can clear from the keyboard.
+Keygent is a macOS menu-bar app on top of **Weaver**, a local coding agent that runs as a background service (`weaverd`). Press <kbd>⌘ ⇧ Space</kbd>, say what you want done in which folder, and go back to your work. The agent reads, edits and runs things in a sandbox; a capsule in the menu bar shows whether it is running, done, or waiting for you. Approvals, questions and errors from every task land in one queue you can clear from the keyboard.
 
 Weaver's core is built on one rule: **the event ledger is the only source of truth, and the kernel is a pure function over it.** Everything else (model calls, tools, the daemon, the app) hangs off the outside, so a task survives a crash, can be replayed, and every file change can be undone.
 
@@ -39,9 +39,8 @@ Weaver's core is built on one rule: **the event ledger is the only source of tru
 
 | Key | What it does |
 |---|---|
-| <kbd>⌥ Space</kbd> | open / close the launcher: one line of what you want, a working folder, optional files or clipboard |
-| <kbd>⌘ ⇧ Space</kbd> | jump straight to the task the capsule is showing |
-| <kbd>⌘ ,</kbd> | settings: Model · MCP · Skills (<kbd>⌘ [</kbd> <kbd>⌘ ]</kbd> to switch pages), keyboard only |
+| <kbd>⌘ ⇧ Space</kbd> | open / close the launcher (the only global hotkey): one line of what you want, a working folder, optional files or clipboard; whatever is waiting for you sits at <kbd>⌘ 1</kbd> |
+| <kbd>⌘ ,</kbd> | settings: Model · MCP · Skills · Permissions · Memory (<kbd>⌘ [</kbd> <kbd>⌘ ]</kbd> to switch pages), keyboard only |
 | <kbd>⌘ ⇧ O</kbd> | attach a file from Finder |
 | menu-bar capsule | left click opens it; right click has *Waiting for you*, *Reconnect*, *Quit* |
 
