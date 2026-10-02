@@ -345,20 +345,6 @@ struct AgentSheetView: View {
                     }
                     .frame(height: 300)
 
-                    if let f = a.detail?.final, !f.isEmpty {
-                        HLine(color: K.line2)
-                        VStack(alignment: .leading, spacing: 6) {
-                            SmallCaps("它的汇报")
-                            ScrollView {
-                                MarkdownView(text: f)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(maxHeight: 140)
-                            .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 12)
-                    }
                 }
 
                 HStack(spacing: 14) {
@@ -392,7 +378,7 @@ struct ArchivedList: View {
             HStack {
                 SectionLabel("已归档 · \(L.archived.count) 个")
                 Spacer()
-                Text("↵ 打开 · ⌘R 恢复 · esc 返回")
+                Text("⌘R 恢复")
                     .font(KFont.sans(12))
                     .foregroundStyle(K.text4)
             }

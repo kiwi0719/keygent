@@ -74,6 +74,9 @@ extension Step {
     /// 列表里显示的标题：■ □ 记号已经分出你说 / Agent 说，去掉「你：」「Agent：」前缀
     var listTitle: String {
         var t = title
+        if kind == .you, let r = text.range(of: "## 任务\n") {           // 子 Agent 收到的交代：背景摘录之后才是任务
+            t = text[r.upperBound...].split(separator: "\n").first.map(String.init) ?? t
+        }
         for p in ["你：", "Agent："] where t.hasPrefix(p) { t = String(t.dropFirst(p.count)) }
         // 列表里一行纯文字：Markdown 的加粗、行内代码记号去掉
         return kind == .agent ? t.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "") : t

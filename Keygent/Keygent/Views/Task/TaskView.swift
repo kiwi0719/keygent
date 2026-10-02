@@ -227,7 +227,7 @@ struct TaskView: View {
         if let w = store.task.hintFor {
             return w.kind == "stuck" ? "给它一个提示，比如：试试换个网址" : "告诉它为什么不行"
         }
-        return store.taskKind.isActive ? "tab 进入 · 插一句话，它在下一步之前会看到" : "tab 进入 · 接着说，开启新的一轮"
+        return store.taskKind.isActive ? "插一句话" : "接着说"
     }
 }
 
@@ -920,7 +920,9 @@ struct StepDetail: View {
                 if step.kind != .step {
                     SmallCaps(step.kind == .you ? "你说" : "Agent 说")
                     if large {
-                        MarkdownView(text: step.text, size: 15)
+                        MarkdownView(text: step.text, size: 15, baseDir: store.task.summary?.workdir)
+                    } else if step.kind == .agent {
+                        MarkdownView(text: step.text, baseDir: store.task.summary?.workdir)
                     } else {
                         Bubble(text: step.text, kind: step.bubbleKind)
                     }

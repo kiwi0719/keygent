@@ -34,7 +34,7 @@ struct McpPage: View {
             if m.list == nil {
                 SettingsEmpty(text: "正在读取…")
             } else if m.servers.isEmpty && m.list?.problem == nil {
-                SettingsEmpty(text: "还没有 MCP 服务器。⌘N 添加：贴一段配置、挑一个常用的，或者从 Claude Code 导入。")
+                SettingsEmpty(text: "还没有 MCP 服务器")
             } else {
                 let win = ListWindow.range(top: m.top, count: m.servers.count)
                 ForEach(win, id: \.self) { i in

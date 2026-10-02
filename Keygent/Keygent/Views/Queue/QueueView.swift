@@ -16,7 +16,7 @@ struct QueueView: View {
                 Text(Q.expanded ? "逐件看" : "等你的事")
                     .font(KFont.sans(17, .black))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(Q.expanded ? "第 \(Q.cur + 1) / \(Q.list.count) 件 · 还剩 \(store.queueLeft) 件待定" : "按时间从早到晚")
+                Text(Q.expanded ? "\(Q.cur + 1) / \(Q.list.count)" : "")
                     .font(KFont.sans(12))
                     .foregroundStyle(K.text3)
             }
@@ -49,10 +49,7 @@ struct QueueView: View {
 
     private var keys: [KeyHint] {
         if !store.queue.expanded {
-            var k = [KeyHint("空格", "逐件看")]
-            if store.queueBulkCount > 0 {
-                k.append(KeyHint("⌘⇧↵", store.queueBulkCount == store.waits.count ? "全部放行" : "放行其中 \(store.queueBulkCount) 件"))
-            }
+            var k: [KeyHint] = []                    // 逐件看、全部放行的键写在按钮上了
             let r = store.queueRunning.count
             if r > 0 { k.append(KeyHint(r == 1 ? "⌘1" : "⌘1–\(r)", "打开在跑的任务")) }
             return k
@@ -63,11 +60,7 @@ struct QueueView: View {
         var k = [KeyHint("↑↓", "换一件")]
         if let w = store.queueCurrent, w.isQuestion {
             k.append(KeyHint("↵", "去回答"))
-        } else if let w = store.queueCurrent {
-            if let p = w.primaryChoice { k.append(KeyHint("⌘↵", w.label(p))) }
-            if let s = w.secondaryChoice { k.append(KeyHint("⌫", w.label(s))) }
-            if w.noteChoice != nil { k.append(KeyHint("tab", w.kind == "stuck" ? "给个提示" : "说明原因")) }
-        }
+        }                                            // 放行 / 先不的键写在按钮上，tab 写在输入框上
         return k
     }
 }
@@ -122,7 +115,7 @@ private struct OverviewPane: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(K.greenBg))
             }
 
-            SectionLabel("在跑 · 只显示摘要")
+            SectionLabel("在跑")
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8)
                 .padding(.top, 4)
@@ -174,12 +167,13 @@ private struct ReviewPane: View {
         HStack(spacing: 0) {
             // 左：列表（窗口式，编号跟着滚动走）
             VStack(alignment: .leading, spacing: 2) {
-                Text(Q.top > 0 ? "↑ 上面还有 \(Q.top) 件" : "编号跟着滚动走")
-                    .font(KFont.sans(11))
-                    .foregroundStyle(K.text4)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 2)
-                    .padding(.bottom, 6)
+                if Q.top > 0 {
+                    Text("↑ 上面还有 \(Q.top) 件")
+                        .font(KFont.sans(11))
+                        .foregroundStyle(K.text4)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                }
                 ForEach(Q.top..<min(N, Q.top + V), id: \.self) { i in
                     let w = Q.list[i]
                     let d = Q.decided[w.id]
@@ -191,10 +185,12 @@ private struct ReviewPane: View {
                                     .font(KFont.sans(13, .bold))
                                     .lineLimit(1)
                                     .truncationMode(.tail)
-                                Text(d ?? "待定")
-                                    .font(KFont.sans(11))
-                                    .foregroundStyle(K.text3)
-                                    .lineLimit(1)
+                                if let d {
+                                    Text(d)
+                                        .font(KFont.sans(11))
+                                        .foregroundStyle(K.text3)
+                                        .lineLimit(1)
+                                }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             Kbd("⌘\(i - Q.top + 1)", active: i == Q.cur)
@@ -204,11 +200,13 @@ private struct ReviewPane: View {
                     }
                     .buttonStyle(RowStyle(selected: i == Q.cur, selectedFill: .white, radius: 6))
                 }
-                Text(Q.top + V < N ? "↓ 下面还有 \(N - Q.top - V) 件" : "到底了")
-                    .font(KFont.sans(11))
-                    .foregroundStyle(K.text4)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 6)
+                if Q.top + V < N {
+                    Text("↓ 下面还有 \(N - Q.top - V) 件")
+                        .font(KFont.sans(11))
+                        .foregroundStyle(K.text4)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 6)
+                }
                 Spacer(minLength: 0)
             }
             .padding(8)
@@ -291,7 +289,7 @@ private struct ReviewPane: View {
                             HStack(spacing: 10) {
                                 Kbd("tab")
                                 TextField("", text: $store.queue.editDraft,
-                                          prompt: Text(w.kind == "stuck" ? "给它一个提示，↵ 发送" : "不同意的话告诉它为什么，↵ 发送")
+                                          prompt: Text(w.kind == "stuck" ? "给它一个提示" : "说明原因")
                                             .foregroundColor(K.text4))
                                     .textFieldStyle(.plain)
                                     .font(KFont.sans(13))
