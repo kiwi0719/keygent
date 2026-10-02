@@ -471,7 +471,7 @@ struct ElicitCard: View {
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(wait.mode == "url" ? "要你在网页上弄完，Weaver 看不到网页里的内容"
-                         : "\(wait.server ?? "服务器") 在要信息；不要在这里填密码 · 填的内容只交给服务器")
+                         : "\(wait.server ?? "服务器") 在要信息；不要在这里填密码")
                         .font(KFont.sans(12))
                         .foregroundStyle(K.text3)
                 }
@@ -494,15 +494,19 @@ struct ElicitCard: View {
                 }
                 .buttonStyle(PressableStyle())
             } else {
-                VStack(spacing: 4) {
+                FormCard(title: "要填 \(fields.count) 项", subtitle: "",
+                         trailing: "tab 换行 · 空格 是/否 · ⌘数字 选") {
                     ForEach(Array(fields.enumerated()), id: \.element.id) { i, f in
-                        row(f, index: i, selected: i == cur)
+                        FormRow(name: f.title, required: f.required, selected: i == cur, last: i == fields.count - 1,
+                                onTap: { store.task.elicitCur = i; store.elicitFocus(wait) }) {
+                            input(f, index: i, selected: i == cur)
+                        }
                     }
                 }
             }
 
             HStack(spacing: 8) {
-                Text(wait.mode == "url" ? "弄完了按 ⌘↵" : "tab 换字段 · 空格 是 / 否 · ⌘数字 选")
+                Text(wait.mode == "url" ? "弄完了按 ⌘↵" : "填的内容只交给服务器")
                     .font(KFont.sans(12))
                     .foregroundStyle(K.text3)
                 Spacer()
@@ -519,66 +523,24 @@ struct ElicitCard: View {
     }
 
     @ViewBuilder
-    private func row(_ f: ElicitField, index i: Int, selected: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(f.title + (f.required ? " *" : ""))
-                    .font(KFont.sans(13, .medium))
-                if !f.description.isEmpty {
-                    Text(f.description).font(KFont.sans(11)).foregroundStyle(K.text3).lineLimit(2)
-                }
+    private func input(_ f: ElicitField, index i: Int, selected: Bool) -> some View {
+        switch f.type {
+        case "boolean":
+            FormToggle(on: store.task.elicitValues[f.name] == .bool(true), showKey: selected) {
+                store.elicitSet(f.name, .bool(!(store.task.elicitValues[f.name] == .bool(true))))
+                store.task.elicitCur = i
             }
-            .frame(width: 170, alignment: .leading)
-            Group {
-                switch f.type {
-                case "boolean":
-                    let on = store.task.elicitValues[f.name] == .bool(true)
-                    Button { store.elicitSet(f.name, .bool(!on)); store.task.elicitCur = i } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: on ? "checkmark.square.fill" : "square")
-                                .foregroundStyle(on ? K.ink : K.text4)
-                            Text(on ? "是" : "否").font(KFont.sans(13))
-                            if selected { Kbd("空格") }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(PressableStyle())
-                case "enum":
-                    HStack(spacing: 6) {
-                        ForEach(Array((f.options ?? []).enumerated()), id: \.offset) { j, o in
-                            let picked = store.task.elicitValues[f.name] == .string(o)
-                            Button { store.elicitSet(f.name, .string(o)); store.task.elicitCur = i } label: {
-                                HStack(spacing: 6) {
-                                    if selected { Kbd("⌘\(j + 1)", active: picked) }
-                                    Text(o).font(KFont.sans(13))
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(RoundedRectangle(cornerRadius: 6).fill(picked ? Color.white : Color.white.opacity(0.45)))
-                                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(picked ? K.ink : .clear))
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(PressableStyle())
-                        }
-                    }
-                default:
-                    TextField("", text: Binding(get: { store.elicitText(f.name) },
-                                                set: { store.elicitSet(f.name, .string($0)) }),
-                              prompt: Text(f.type == "string" ? "" : "数字").foregroundColor(K.text4))
-                        .textFieldStyle(.plain)
-                        .font(KFont.sans(13))
-                        .focused(focused, equals: .elicit(i))
-                        .padding(.horizontal, 8)
-                        .frame(height: 28)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(.white))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(selected ? K.ink : K.border))
-                }
+        case "enum":
+            let picked: String? = { if case .string(let s)? = store.task.elicitValues[f.name] { return s }; return nil }()
+            FormChoices(options: f.options ?? [], picked: picked, showKeys: selected) {
+                store.elicitSet(f.name, .string($0))
+                store.task.elicitCur = i
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        default:
+            FormField(text: Binding(get: { store.elicitText(f.name) }, set: { store.elicitSet(f.name, .string($0)) }),
+                      placeholder: f.description.isEmpty ? (f.type == "string" ? "" : "数字") : f.description,
+                      mono: f.type != "string", focused: focused, field: .elicit(i))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.white.opacity(0.5) : .clear))
     }
 }
 

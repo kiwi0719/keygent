@@ -311,57 +311,38 @@ private struct PromptList: View {
     }
 }
 
-/// 选了带参数的提示词：一行一个参数（必填的标 *），tab 换行，↵ 交出去
+/// 选了带参数的提示词：一张白卡，一行一个参数（必填的带小标签），tab 换行，↵ 交出去
 private struct PromptArgsForm: View {
     @Environment(AppStore.self) private var store
     let prompt: PromptItem
     var focused: FocusState<InputField?>.Binding
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Text(prompt.command).font(KFont.mono(14, .medium))
-                Text(prompt.description).font(KFont.sans(12)).foregroundStyle(K.text3).lineLimit(1)
-                Spacer()
-                if store.launcher.submitting { ProgressView().controlSize(.small) }
-            }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 4)
-            ForEach(Array(prompt.arguments.enumerated()), id: \.offset) { i, a in
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(a.name + (a.required ? " *" : "")).font(KFont.mono(13, .medium))
-                        if !a.description.isEmpty {
-                            Text(a.description).font(KFont.sans(11)).foregroundStyle(K.text3).lineLimit(1)
-                        }
+        let L = store.launcher
+        let need = prompt.arguments.filter(\.required).count
+        VStack(alignment: .leading, spacing: 8) {
+            FormCard(title: prompt.command, subtitle: prompt.description,
+                     trailing: need > 0 ? "必填 \(need) / 共 \(prompt.arguments.count)" : "\(prompt.arguments.count) 个参数，都可以不填",
+                     keys: [KeyHint("tab", "换行"), KeyHint("↵", L.argCur == prompt.arguments.count - 1 ? "交出去" : "下一个"),
+                            KeyHint("⌘↵", "直接交出去"), KeyHint("esc", "换一个")]) {
+                ForEach(Array(prompt.arguments.enumerated()), id: \.offset) { i, a in
+                    FormRow(name: a.name, required: a.required, selected: L.argCur == i,
+                            last: i == prompt.arguments.count - 1,
+                            onTap: { store.launcher.argCur = i; store.requestFocus(.promptArg(i)) }) {
+                        FormField(text: Binding(get: { store.launcher.argValues[safe: i] ?? "" },
+                                                set: { if store.launcher.argValues.indices.contains(i) { store.launcher.argValues[i] = $0 } }),
+                                  placeholder: a.description.isEmpty ? (a.required ? "要填" : "可以不填") : a.description,
+                                  focused: focused, field: .promptArg(i))
                     }
-                    .frame(width: 200, alignment: .leading)
-                    TextField("", text: Binding(get: { store.launcher.argValues[safe: i] ?? "" },
-                                                set: { if store.launcher.argValues.indices.contains(i) { store.launcher.argValues[i] = $0 } }))
-                        .textFieldStyle(.plain)
-                        .font(KFont.sans(14))
-                        .focused(focused, equals: .promptArg(i))
-                        .padding(.horizontal, 10)
-                        .frame(height: 32)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(.white))
-                        .overlay(RoundedRectangle(cornerRadius: 7)
-                            .strokeBorder(store.launcher.argCur == i ? K.ink : K.border))
                 }
-                .padding(.horizontal, 8)
             }
-            HStack(spacing: 14) {
-                HStack(spacing: 5) { Kbd("tab"); Text("换行") }
-                HStack(spacing: 5) { Kbd("↵"); Text("下一个 · 填完交出去") }
-                Spacer()
-                HStack(spacing: 5) { Kbd("esc"); Text("换一个") }
+            if L.submitting {
+                HStack(spacing: 6) { ProgressView().controlSize(.mini); Text("正在交给 Weaver……") }
+                    .font(KFont.sans(12)).foregroundStyle(K.green).padding(.horizontal, 4)
             }
-            .font(KFont.sans(12))
-            .foregroundStyle(K.text3)
-            .padding(.horizontal, 8)
-            .padding(.top, 6)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
     }
 }
 
