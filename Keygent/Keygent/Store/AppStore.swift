@@ -108,6 +108,12 @@ struct TaskState {
     var changesOpen = false
 }
 
+struct PeekState {
+    var task: String? = nil
+    var todos: [TodoItem] = []
+    var steps: [Step] = []
+}
+
 /// ⌘D：一个任务改过的文件的 diff，↑↓ 换文件
 struct DiffSheetState {
     var task: String
@@ -194,6 +200,8 @@ final class AppStore {
     var detail = DetailState()
     var editor: ArgsEditorState? = nil
     var diffSheet: DiffSheetState? = nil
+    /// 胶囊下那张小卡的内容（PeekController）
+    var peek = PeekState()
     var agentView: AgentViewState? = nil
     /// 等第二次确认的操作（任务页）：“undo:路径”
     var armed: String? = nil

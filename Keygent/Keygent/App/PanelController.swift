@@ -95,6 +95,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     var isVisible: Bool { panel.isVisible }
 
     func show() {
+        onShow()
         if NSApp.isHidden { NSApp.unhideWithoutActivation() }
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         if let vis = screen?.visibleFrame {
@@ -107,9 +108,15 @@ final class PanelController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in self?.store.didShow() }
     }
 
+    /// 收起之后（胶囊下的小卡借这个时机出来）
+    var onHide: () -> Void = {}
+    /// 呼出之前（小卡收起来）
+    var onShow: () -> Void = {}
+
     func hide() {
         panel.orderOut(nil)
         store.didHide()
+        onHide()
         // 收起后把前台还给之前的 App；否则 Keygent 仍在前台却没有窗口，之后每次按键都会「咚」
         if NSApp.isActive { NSApp.hide(nil) }
     }

@@ -11,6 +11,8 @@ final class CapsuleController: NSObject {
     var onOpen: () -> Void = {}
     var onLauncher: () -> Void = {}
     var onSettings: () -> Void = {}
+    /// 鼠标进出胶囊（胶囊下的小卡）
+    var onHover: (Bool) -> Void = { _ in }
     private static let autosaveName = "keygent.capsule"
 
     init(store: AppStore) {
@@ -33,6 +35,8 @@ final class CapsuleController: NSObject {
             button.action = #selector(clicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.setAccessibilityLabel("Keygent")
+            button.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                                  owner: self, userInfo: nil))
         }
         refresh()
     }
@@ -50,6 +54,15 @@ final class CapsuleController: NSObject {
             let h = button.bounds.height > 0 ? button.bounds.height : NSStatusBar.system.thickness
             host.frame = NSRect(x: 4, y: ((h - size.height) / 2).rounded(), width: size.width, height: size.height)
         }
+    }
+
+    @objc func mouseEntered(with event: NSEvent) { onHover(true) }
+    @objc func mouseExited(with event: NSEvent) { onHover(false) }
+
+    /// 胶囊在屏幕上的位置（小卡挂在它下面）
+    var screenFrame: NSRect? {
+        guard let b = item.button, let w = b.window else { return nil }
+        return w.convertToScreen(b.convert(b.bounds, to: nil))
     }
 
     @objc private func clicked(_ sender: NSStatusBarButton) {

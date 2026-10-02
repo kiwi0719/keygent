@@ -256,4 +256,26 @@ extension AppStore {
             }
         }
     }
+
+    // MARK: 胶囊下的小卡
+
+    /// 小卡说哪个任务：胶囊里那件（等你 / 出错），不然最近在跑的那个；都没有就不出卡
+    var peekTask: TaskSummary? {
+        switch capsule {
+        case .waiting(let t, _, _, _), .error(let t, _):
+            return tasks.first { $0.id == t }
+        default:
+            return tasks.filter { $0.kind == .run || $0.kind == .queued }.max { $0.updated < $1.updated }
+        }
+    }
+
+    func loadPeek() {
+        guard let t = peekTask else { return }
+        if peek.task != t.id { peek = PeekState(task: t.id) }
+        Task { @MainActor in
+            guard let d = try? await client.task(t.id), peek.task == t.id else { return }
+            peek.todos = d.todos ?? []
+            peek.steps = d.steps.filter { $0.kind == .step && $0.status != "note" }
+        }
+    }
 }

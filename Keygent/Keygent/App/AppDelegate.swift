@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let store = AppStore()
     private var panel: PanelController!
     private var capsule: CapsuleController!
+    private var peek: PeekController!
     private var hotKeys: [HotKey] = []
     private var askedNotify = false
 
@@ -27,6 +28,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         capsule.onSettings = { [weak self] in
             self?.store.openSettings()
             self?.panel.show()
+        }
+        // 胶囊下的小卡：面板收起时（有任务在跑）出来 4 秒；鼠标停在胶囊上时也出来
+        peek = PeekController(store: store)
+        peek.anchor = { [weak self] in self?.capsule.screenFrame }
+        panel.onHide = { [weak self] in self?.peek.show() }
+        panel.onShow = { [weak self] in self?.peek.hide() }
+        capsule.onHover = { [weak self] inside in
+            guard let self else { return }
+            if inside { self.peek.show(for: nil) } else { self.peek.hide() }
         }
 
         // 面板没开着时出现新的等待 → 系统通知（api.md 3：App 在后台时弹系统通知）

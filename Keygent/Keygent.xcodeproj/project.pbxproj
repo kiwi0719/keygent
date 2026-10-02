@@ -31,6 +31,7 @@
 		715B424453BD562F18E635F9 /* AppStore+Queue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952D8E9C5AD963208F5C7BE7 /* AppStore+Queue.swift */; };
 		7D77DB595BD0B860EDE7A480 /* PanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63C038EE4A9920F8E27C35F4 /* PanelController.swift */; };
 		7E68FB1CFBBAA270E9A78B0F /* LauncherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FAA5716D08A28A976975ABB /* LauncherView.swift */; };
+		7EDB41E75357B2578B4AF3D8 /* PeekController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 895D294F88B3B8EB3B4FD48A /* PeekController.swift */; };
 		8576B1F48634E13825DB4C89 /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33AB70D50B7F5F0A4985154 /* SettingsModels.swift */; };
 		8BB0B08CA31E5262136D2543 /* DaemonService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E094D2AEFB42D6B344A3457D /* DaemonService.swift */; };
 		985FEC9CB608500C90045755 /* QueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3EDBF4857B9783DA6A132D /* QueueView.swift */; };
@@ -79,6 +80,7 @@
 		6FAA5716D08A28A976975ABB /* LauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherView.swift; sourceTree = "<group>"; };
 		71759219D7FE6167085C90F0 /* EventStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStream.swift; sourceTree = "<group>"; };
 		71DC2291CD77CBEB7FDE79DA /* DiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffView.swift; sourceTree = "<group>"; };
+		895D294F88B3B8EB3B4FD48A /* PeekController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeekController.swift; sourceTree = "<group>"; };
 		8E057521A4B7AFEE463867F4 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		952D8E9C5AD963208F5C7BE7 /* AppStore+Queue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Queue.swift"; sourceTree = "<group>"; };
 		A454520997D9BACC956DDF19 /* AppStore+Question.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Question.swift"; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 				271181DF3D9D1C2A59674783 /* HotKey.swift */,
 				E73DFA3120E48BE6E561ADAA /* main.swift */,
 				63C038EE4A9920F8E27C35F4 /* PanelController.swift */,
+				895D294F88B3B8EB3B4FD48A /* PeekController.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -413,6 +416,7 @@
 				0F387C20C5162B1E953FA061 /* ModelPage.swift in Sources */,
 				EA5A21E74FE4E3DC2117AA42 /* Models.swift in Sources */,
 				7D77DB595BD0B860EDE7A480 /* PanelController.swift in Sources */,
+				7EDB41E75357B2578B4AF3D8 /* PeekController.swift in Sources */,
 				ACE21E4D79838C7F50B05262 /* PermissionsPage.swift in Sources */,
 				985FEC9CB608500C90045755 /* QueueView.swift in Sources */,
 				9D816FDBD1F6AECE61C08528 /* RootView.swift in Sources */,
