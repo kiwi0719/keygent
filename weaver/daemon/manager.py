@@ -241,8 +241,33 @@ class TaskManager:
             if self.uploads is None or self.uploads.get(i) is None:
                 raise BadRequest(f"没有这个附件：{i}")
 
+    def prompts(self, workdir: str | None) -> list[dict]:
+        fn = getattr(self.factory, "prompts", None)
+        return fn(workdir) if fn else []
+
+    def create_from_prompt(self, prompt: dict, workdir: str | None = None, **opts) -> dict:
+        """用 MCP 服务器的 prompt 新建任务：拿到消息，文字拼成第一句话，图片当附件；标题用 prompt 的名字。"""
+        fn = getattr(self.factory, "prompt_parts", None)
+        if fn is None:
+            raise BadRequest("这个服务不支持 MCP prompts")
+        server, name = str(prompt.get("server") or ""), str(prompt.get("name") or "")
+        if not server or not name:
+            raise BadRequest("prompt 要有 server 和 name")
+        try:
+            parts = fn(workdir, server, name, prompt.get("arguments") or {})
+        except ValueError as e:
+            raise BadRequest(str(e)) from None
+        except Exception as e:
+            raise BadRequest(f"拿 prompt 失败：{type(e).__name__}: {e}") from None
+        text = "\n\n".join(p["text"] for p in parts if p.get("type") == "text").strip()
+        if not text and not parts:
+            raise BadRequest("这个 prompt 是空的")
+        content = [{"type": "text", "text": text or f"/{server}:{name}"}] + [p for p in parts if p.get("type") != "text"]
+        return self.create(text or f"/{server}:{name}", workdir=workdir, content=content,
+                           title=f"/{server}:{name}", **opts)
+
     def create(self, text: str, workdir: str | None = None, attachments: list[str] | None = None,
-               source: str = "user", **opts) -> dict:
+               source: str = "user", content: list[dict] | None = None, title: str | None = None, **opts) -> dict:
         if not (text or "").strip() and not attachments:
             raise BadRequest("text 不能为空")
         self._check_attachments(attachments)
@@ -250,8 +275,10 @@ class TaskManager:
             meta = self.store.create(text, workdir=workdir, source=source, **opts)
         except ValueError as e:
             raise BadRequest(str(e)) from None
+        if title:
+            self.store.set_title(meta.id, title)
         try:
-            self.runner(meta.id).submit(self._content(text, attachments, meta.workdir), source=source)
+            self.runner(meta.id).submit(content or self._content(text, attachments, meta.workdir), source=source)
         except Exception:
             self.store.archive(meta.id)             # 造不出执行者（比如没配模型）：别留下一个空任务
             with self._lock:
@@ -373,7 +400,8 @@ class TaskManager:
         self._emit_summary(task_id)
         return self.summary(task_id)
 
-    def answer(self, wait_id: str, decision: str, args: dict | None = None, note: str = "") -> dict:
+    def answer(self, wait_id: str, decision: str, args: dict | None = None, note: str = "",
+               values: dict | None = None) -> dict:
         if wait_id.startswith("trust-"):
             task_id = wait_id[len("trust-"):]
             if self.store.get(task_id) is None:
@@ -395,6 +423,17 @@ class TaskManager:
                 raise BadRequest(f"这件等待不能选 {decision}，可选：{'、'.join(item['choices'])}")
             if decision == "answer" and not note.strip():
                 raise BadRequest("回答不能为空；不想回答就选 skip，让它自己定")
+            if item["kind"] == "elicit":            # 服务器的表单：按它给的类型和必填项校验
+                content = None
+                if decision == "accept" and item.get("mode") != "url":
+                    from ..mcp.manager import check_values
+                    try:
+                        content = check_values(item.get("fields") or [], values or {})
+                    except ValueError as e:
+                        raise BadRequest(str(e)) from None
+                r.resolve(wait_id, {"action": decision, "content": content})
+                self.wake(task_id)
+                return self.summary(task_id)
             value = self._value(item, decision, note)
             if value.get("always"):                  # 撤销过又点了“总是允许”：重新生效
                 self._set_revoked(task_id, value["always"], False)
@@ -419,6 +458,7 @@ class TaskManager:
         if decision == "always":
             call = item["call"]
             key = (command_prefix(call["args"].get("command", "")) if call["name"] == "bash"
+                   else f"sampling:{call['args'].get('server', '')}" if call["name"] == "sampling"
                    else mcp_key(call["name"], call["args"]))
             return {"allow": True, "always": key}
         return {"allow": False, "note": note or ("用户选择停下" if decision == "stop" else "用户拒绝")}
@@ -729,7 +769,8 @@ class TaskManager:
         metas = {m.id: m for m in self.store.list()}
         tasks = [self.summary(i, m) for i, m in metas.items()]
         ws = self.waits()
-        ws = [w for w in ws if w["kind"] == "question"] + [w for w in ws if w["kind"] != "question"]  # 问你的先提醒
+        ws = ([w for w in ws if w["kind"] in ("question", "elicit")] +
+              [w for w in ws if w["kind"] not in ("question", "elicit")])          # 问你的先提醒
         err = next((t for t in tasks if t["status"] == "error"
                     and metas[t["id"]].extra.get("seen", 0) < t["updated"]), None)   # 出错之后还没看过的
         return {"running": sum(t["status"] == "running" for t in tasks),

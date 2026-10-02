@@ -131,7 +131,11 @@ class McpTools(ContextProvider):
             return f"没有这个 MCP 工具：{server} / {tool}。用 mcp_search 查一下。", {"is_error": True}
         if readonly_only and not _readonly(t):
             return "explore 子 Agent 只能调用标了只读的 MCP 工具。", {"is_error": True}
-        text, is_error = self.manager.call(server, tool, arguments if isinstance(arguments, dict) else {})
+        args = arguments if isinstance(arguments, dict) else {}
+        if hasattr(self.manager, "call_with"):       # 常驻服务：带上“谁在调”，借模型的用量算进这一步
+            out, is_error, usage = self.manager.call_with(server, tool, args)
+            return out, {"is_error": is_error, **({"usage": usage} if usage else {})}
+        text, is_error = self.manager.call(server, tool, args)
         return text, {"is_error": is_error}
 
     def search(self, query: str, readonly_only: bool = False) -> str:
@@ -171,17 +175,22 @@ class McpTools(ContextProvider):
 class McpView:
     """一个任务看到的那几个服务器（常驻服务里所有任务共用一个 McpManager）。接口和 McpManager 一样，按显示名调用。"""
 
-    def __init__(self, manager, keys: dict[str, str]):
+    def __init__(self, manager, keys: dict[str, str], caller=None):
         self.manager, self.keys = manager, dict(keys)        # 显示名 → 管理器里的 key
+        self.caller = caller                                  # 这个任务（weaver.mcp.callers.Caller）
 
     @property
     def servers(self) -> dict:
         return {name: self.manager.servers[key] for name, key in self.keys.items()}
 
     def call(self, server: str, tool: str, arguments: dict | None) -> tuple[str, bool]:
+        out, is_error, _ = self.call_with(server, tool, arguments)
+        return out, is_error
+
+    def call_with(self, server: str, tool: str, arguments: dict | None):
         if server not in self.keys:
-            return f"没有名为 {server} 的 MCP 服务器", True
-        return self.manager.call(self.keys[server], tool, arguments)
+            return f"没有名为 {server} 的 MCP 服务器", True, {}
+        return self.manager.call_with(self.keys[server], tool, arguments, self.caller)
 
     def list_resources(self, server: str | None = None) -> str:
         return self.manager.list_resources(server, self.keys)

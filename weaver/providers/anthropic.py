@@ -93,8 +93,12 @@ class AnthropicModel(StreamingModel):
             elif m["role"] == "assistant":
                 add("assistant", self._assistant_blocks(m["content"]))
             elif m["role"] == "tool":
-                text = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"], ensure_ascii=False)
-                block = {"type": "tool_result", "tool_use_id": safe_id(m["call_id"]), "content": text}
+                c = m["content"]
+                if isinstance(c, list):                  # 文字 + 图片（MCP 工具返回的图）：tool_result 里本来就能放图片
+                    content = [self._user_part(p) for p in c if isinstance(p, dict)] or "(没有输出)"
+                else:
+                    content = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
+                block = {"type": "tool_result", "tool_use_id": safe_id(m["call_id"]), "content": content}
                 if m.get("is_error"):
                     block["is_error"] = True
                 add("user", [block])

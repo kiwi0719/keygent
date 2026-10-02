@@ -27,6 +27,17 @@ BUDGET_REMINDER = ("步数或 token 预算已用完。不要再调用工具，"
                    "直接总结已经完成的工作和还剩下的事。")
 
 
+def _text_of(output) -> str:
+    """片段列表（文字 + 图片）的文字部分；和 weaver/parts.py 一致，内核不依赖别的模块所以写在这里。"""
+    if isinstance(output, list):
+        return "\n".join(p.get("text", "") for p in output if isinstance(p, dict) and p.get("type") == "text")
+    return str(output)
+
+
+def _images(output: list) -> int:
+    return sum(1 for p in output if isinstance(p, dict) and p.get("type") == "image")
+
+
 def billable(usage: dict) -> int:
     """计入预算的 token：命中缓存的输入按一折算（大致是实际价格），其余照算。
     每轮都重发整段上下文，按全价累计的话，几十轮就把预算“花光”了，实际却没花多少钱。"""
@@ -184,10 +195,10 @@ def fold(events: list[dict], state: State | None = None) -> State:
             if run:
                 run.status = ev["status"]
                 run.in_flight.clear()
-                # 这一轮里没回答的审批、“卡住了问人”随之作废（比如等审批时被取消），不再挂在“等你的事”里。
-                # 外部输入的确认属于整个会话，不跟着这一轮走。
+                # 这一轮里没回答的审批、“卡住了问人”、MCP 服务器的提问 / 借模型随之作废（比如等的时候被取消），
+                # 不再挂在“等你的事”里。外部输入的确认属于整个会话，不跟着这一轮走。
                 for w in s.waits.values():
-                    if not w.resolved and w.seq > run.start_seq and ("call_id" in w.payload or "sub" in w.payload or w.kind == "stuck"):
+                    if not w.resolved and w.seq > run.start_seq and "input_id" not in w.payload:
                         w.resolved, w.closed = True, True
             s.last_finish_seq = seq
         elif t == "InputReceived":
@@ -258,8 +269,8 @@ def fold(events: list[dict], state: State | None = None) -> State:
                 run.pending.pop(ev["action_id"], None)
                 run.tokens += billable(ev.get("usage") or {})   # 子 Agent 等工具的用量，计入本任务预算
                 out = ev.get("output")
-                text = out if isinstance(out, str) else str(out)
-                s.ctx_growth_bytes += len(text.encode())
+                text = out if isinstance(out, str) else _text_of(out)
+                s.ctx_growth_bytes += len(text.encode()) + (IMAGE_BYTES * _images(out) if isinstance(out, list) else 0)
                 call = run.calls.get(ev["action_id"]) or {}
                 name, args = call.get("name", "?"), call.get("args")
                 run.history.append({"step": s.model_steps, "name": name, "error": bool(ev.get("is_error")),

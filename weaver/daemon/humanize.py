@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 
 from ..kernel import ANSWERED
+from ..parts import images_of, text_of
 from .changes import edit_diff
 
 OUT_LEN = 300
@@ -209,8 +210,12 @@ def steps(events: list[dict], subs: dict[str, str] | None = None) -> list[dict]:
             step = by_call.get(ev["action_id"])
             if step is None:
                 continue
-            text = ev.get("output") if isinstance(ev.get("output"), str) else str(ev.get("output"))
+            text = text_of(ev.get("output"))
             step["out"] = _short(text, OUT_LEN)
+            imgs = images_of(ev.get("output"))
+            if imgs:                                # 工具返回的图片：App 用 /v1/blobs/{id} 取来显示缩略图
+                step["images"] = [{"id": p["ref"].removeprefix("blob://sha256-"), "mime": p.get("mime", "")}
+                                  for p in imgs]
             if step["tool"] == "ask_user" and not ev.get("is_error"):     # 回答不是错误，也不算“拒绝”
                 step["out"] = ("你答：" + _short(text[len(ANSWERED_PREFIX):], OUT_LEN)
                                if text.startswith(ANSWERED_PREFIX) else "你让它自己定")

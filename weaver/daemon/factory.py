@@ -19,9 +19,11 @@ from ..agents import AgentTypes, ProjectTrust
 from ..environment import Environment
 from ..jobs import Jobs
 from ..mcp import McpConfig, sdk_available
+from ..mcp.callers import Caller
 from ..mcp.pool import McpPool, TaskMcp
 from ..memory import GUIDE as MEMORY_GUIDE, Memory
-from ..permissions import PermissionPolicy
+from .. import kernel as k
+from ..permissions import PermissionPolicy, always_allowed
 from ..providers import make_model
 from ..providers.catalog import context_window
 from ..runner import Runner
@@ -102,12 +104,52 @@ class RunnerFactory:
         tools.tools["ask_user"] = ask_tool()
         runner = Runner(LEDGER, store, self.model, tools, policy, system, sink=sink, on_delta=on_delta,
                         context=[Environment(root, sandbox), memory, skills, agents, mcp], extract_memory=memory)
+        mcp.caller = Caller(ask=runner.ask_during_call, root=str(root), task=meta.id,
+                            sample=lambda params: self._sample(runner, meta, params),
+                            allowed=lambda key: key in always_allowed(k.fold(store.load(LEDGER))) - policy.revoked())
         runner.before_run.append(lambda: self._prepare_mcp(meta.id, runner, mcp))
         runner.project_trust = None if scratch else ProjectTrust(skills, agents, mcp)   # 任务管理器据此问“信任吗”
         parent.append(runner)
         return runner
 
     # ------------------------------------------------ MCP
+
+    def _mcp_for(self, workdir: str | None) -> TaskMcp:
+        root = Path(workdir).expanduser().resolve() if workdir else self.scratch
+        scratch = not workdir or _under(root, self.scratch)
+        return TaskMcp(McpConfig(root, self.home, project=not scratch), self.mcp_pool, None)
+
+    def prompts(self, workdir: str | None) -> list[dict]:
+        """这个工作目录能用的 MCP prompts（用户级 + 已信任的项目级），启动器里 / 列出来（design/mcp2.md 第四节）。"""
+        mcp = self._mcp_for(workdir)
+        keys = mcp.usable()
+        pool = self.mcp_pool()
+        if not keys or pool is None:
+            return []
+        pool.manager.ensure(list(keys.values()))
+        return pool.manager.list_prompts(keys)
+
+    def prompt_parts(self, workdir: str | None, server: str, name: str, arguments: dict) -> list[dict]:
+        keys = self._mcp_for(workdir).usable()
+        pool = self.mcp_pool()
+        if server not in keys or pool is None:
+            raise ValueError(f"没有能用的 MCP 服务器 {server}")
+        pool.manager.ensure([keys[server]])
+        return pool.manager.get_prompt(keys[server], name, {k: str(v) for k, v in (arguments or {}).items()})
+
+    @staticmethod
+    def _sample(runner, meta: TaskMeta, params: dict) -> tuple[str, dict]:
+        """MCP 服务器借用模型（design/mcp2.md 第三节）：用这个任务的模型，不带工具、不带我们的 system prompt；
+        用量算进发起调用的那一步（这个任务的预算）。预算用完就拒绝。"""
+        state = k.fold(runner.store.load(LEDGER))
+        if state.run and state.run.tokens >= meta.token_budget:
+            raise RuntimeError("这个任务的 token 预算用完了")
+        messages = [{"role": "assistant" if m.get("role") == "assistant" else "user",
+                     "content": [{"type": "text", "text": m.get("text") or "…"}]} for m in params.get("messages") or []]
+        out = runner.model.create(params.get("system") or "", [], messages or [{"role": "user", "content": [
+            {"type": "text", "text": "…"}]}])
+        text = "".join(p.get("text", "") for p in out.get("content") or [] if p.get("type") == "text")
+        return text, out.get("usage") or {}
 
     def mcp_pool(self) -> McpPool | None:
         """所有任务共用的 MCP 连接。第一次用到才建（导入 SDK 要 30 多 MB）；没装 SDK 返回 None。"""

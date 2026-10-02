@@ -61,6 +61,8 @@ class Handler(BaseHTTPRequestHandler):
         ("GET", r"/v1/waits", "list_waits"),
         ("POST", r"/v1/waits/([\w-]+)", "answer"),
         ("POST", r"/v1/blobs", "upload"),
+        ("GET", r"/v1/blobs/([0-9a-f]{64})", "blob"),
+        ("GET", r"/v1/prompts", "prompts"),
         ("GET", r"/v1/events", "events"),
         ("GET", r"/v1/search", "search"),
         # 设置页（design/settings.md）。具体路径排在 /mcp/{名字} 前面
@@ -215,8 +217,32 @@ class Handler(BaseHTTPRequestHandler):
     def h_create_task(self):
         d = self._json()
         opts = {k: d[k] for k in ("max_steps", "token_budget") if isinstance(d.get(k), int) and d[k] > 0}
+        if d.get("prompt") is not None:              # MCP prompt 代替 text（启动器里 / 选的，design/mcp2.md 第四节）
+            self._send(201, self.mgr.create_from_prompt(self._obj(d, "prompt"), workdir=self._str(d, "workdir") or None,
+                                                        **opts))
+            return
         self._send(201, self.mgr.create(self._str(d, "text"), workdir=self._str(d, "workdir") or None,
                                         attachments=self._ids(d), **opts))
+
+    def h_prompts(self):
+        workdir = (self.query.get("workdir") or [""])[0] or None
+        self._send(200, {"prompts": self.mgr.prompts(workdir)})
+
+    def h_blob(self, digest):
+        """工具结果里的图片（步骤的 images），App 取来显示缩略图。只给 BlobStore 里有的。"""
+        blobs = self.mgr.blobs
+        try:
+            data = blobs.get("blob://sha256-" + digest) if blobs is not None else None
+        except OSError:
+            data = None
+        if data is None:
+            raise HttpError(404, "not_found", "没有这个文件")
+        self.send_response(200)
+        mime = (self.query.get("mime") or [""])[0]
+        self.send_header("Content-Type", mime if re.fullmatch(r"image/[a-z0-9.+-]+", mime) else "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def h_get_task(self, task_id):
         self._send(200, self.mgr.archived_detail(task_id) if self._flag("archived") else self.mgr.detail(task_id))
@@ -257,11 +283,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def h_answer(self, wait_id):
         d = self._json()
-        args = d.get("args")
+        args, values = d.get("args"), d.get("values")
         if args is not None and not isinstance(args, dict):
             raise HttpError(400, "bad_request", "args 应该是一个对象")
+        if values is not None and not isinstance(values, dict):
+            raise HttpError(400, "bad_request", "values 应该是一个对象")
         self._send(200, self.mgr.answer(wait_id, self._str(d, "decision", required=True), args=args,
-                                        note=self._str(d, "note")))
+                                        note=self._str(d, "note"), values=values))
 
     def h_upload(self):
         if self.server.manager.uploads is None:

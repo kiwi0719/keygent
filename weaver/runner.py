@@ -125,9 +125,21 @@ class Runner:
                    "parent_call": info.get("call_id"), "reason": p.get("reason", "")}
         if "call_id" in p:
             payload["call"] = {"id": p["call_id"], "name": p.get("name"), "args": p.get("args") or {}}
+        return self._wait_here(run_id, wait.kind, payload, poll, timeout) or {"allow": False, "note": "主任务被取消"}
+
+    def ask_during_call(self, kind: str, payload: dict, poll: float = 0.2, timeout: float | None = None):
+        """工具调用中途要人回答（MCP 服务器提问、借用模型，design/mcp2.md 第二、三节）：同 ask_up，
+        在这个任务里记一件等待、阻塞到被回答。任务被取消 / 这一轮结束了返回 None。"""
+        state = self._fold()
+        run_id = state.run.id if state.run and state.run.active else None
+        if run_id is None:
+            return None
+        return self._wait_here(run_id, kind, payload, poll, timeout)
+
+    def _wait_here(self, run_id: str, kind: str, payload: dict, poll: float, timeout: float | None):
         wait_id = new_id()
         start = len(self._load())                   # 只看这之后的（先记位置再记等待：回答来得再快也不会漏）
-        self._append([self._event("WaitStarted", run_id=run_id, wait_id=wait_id, kind=wait.kind, payload=payload)])
+        self._append([self._event("WaitStarted", run_id=run_id, wait_id=wait_id, kind=kind, payload=payload)])
         deadline = (time.monotonic() + timeout) if timeout else None
         while deadline is None or time.monotonic() < deadline:
             events = self._load()
@@ -135,7 +147,7 @@ class Runner:
                 if e["type"] == "WaitResolved" and e.get("wait_id") == wait_id:
                     return e.get("value")
                 if e["type"] == "Cancelled" or (e["type"] == "RunFinished" and e.get("run_id") == run_id):
-                    return {"allow": False, "note": "主任务被取消"}
+                    return None
             start = len(events)
             time.sleep(poll)
         return {"allow": False, "note": "等太久没人回答"}
@@ -266,6 +278,14 @@ class Runner:
             output, hits = self.redactor.redact(output)
             if hits:
                 output += rd.note(hits)
+        elif isinstance(output, list):                 # 文字 + 图片：只脱敏文字（图片里的字不处理）
+            parts = []
+            for p in output:
+                if isinstance(p, dict) and p.get("type") == "text":
+                    t, hits = self.redactor.redact(p.get("text", ""))
+                    p = {**p, "text": t + (rd.note(hits) if hits else "")}
+                parts.append(p)
+            output = parts
         if call.get("edited_from") is not None and isinstance(output, str):   # 模型看到的是它原来的调用，这里说清实际跑的是什么
             output = f"[用户把参数改成了：{json.dumps(call['args'], ensure_ascii=False)}]\n{output}"
         extra = {"usage": meta["usage"]} if meta.get("usage") else {}

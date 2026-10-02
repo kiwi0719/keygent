@@ -163,6 +163,7 @@ class OpenAIChatModel(StreamingModel):
         out = [{"role": "system", "content": [{"type": "text", "text": system, "cache_control": cc}]
                 if marks else system}]
         last_user = max((i for i, m in enumerate(messages) if m["role"] == "user"), default=-1)
+        pending_images: list[dict] = []
         for i, m in enumerate(messages):
             if m["role"] == "user":
                 out.append(self._user(m["content"]))
@@ -170,10 +171,22 @@ class OpenAIChatModel(StreamingModel):
                 echo = self.quirks.echo_reasoning_scope == "all" or i > last_user
                 out.append(self._assistant(m["content"], echo))
             elif m["role"] == "tool":
-                text = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"], ensure_ascii=False)
+                c = m["content"]
+                images = [p for p in c if isinstance(p, dict) and p.get("type") == "image"] if isinstance(c, list) else []
+                if isinstance(c, list):                  # 工具消息只能是文字：图片补在下一条用户消息里
+                    text = "\n".join(p.get("text", "") for p in c if isinstance(p, dict) and p.get("type") == "text")
+                    text += f"\n[图片 {len(images)} 张，见下一条]" if images else ""
+                else:
+                    text = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
                 text = ("[错误] " + text) if m.get("is_error") else text
                 out.append({"role": "tool", "tool_call_id": m["call_id"],
                             "content": [{"type": "text", "text": text}] if marks else text})
+                pending_images.extend(images)
+                nxt = messages[i + 1] if i + 1 < len(messages) else None
+                if pending_images and not (nxt and nxt["role"] == "tool"):   # 这一批工具结果之后再补，别插在中间
+                    out.append({"role": "user", "content": [{"type": "text", "text": "（上面工具结果里的图片）"}]
+                                + [self._user_part(p) for p in pending_images]})
+                    pending_images = []
         if marks and messages and messages[-1].get("cache") and isinstance(out[-1].get("content"), list):
             last = out[-1]["content"][-1]
             last["cache_control"] = cc                   # 断点打在最后一条消息的最后一个片段上

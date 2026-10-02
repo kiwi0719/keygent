@@ -19,6 +19,7 @@ CHOICES = {
     "stuck": ["continue", "stop", "hint"],
     "input": ["allow", "deny"],
     "question": ["answer", "skip"],
+    "elicit": ["accept", "decline", "cancel"],
 }
 
 
@@ -37,7 +38,22 @@ def waits(state: k.State, events: list[dict], root: str | None = None) -> list[d
         p = w.payload or {}
         ev = started.get(w.id, {})
         item = {"id": w.id, "seq": ev.get("seq", 0), "ts": ev.get("ts", 0)}
-        if "sub" in p:                              # 子 Agent 升上来的：照样能放行 / 改参数，注明来自哪个子 Agent
+        if "elicit" in p:                           # MCP 服务器在调用中途问你（design/mcp2.md 第二节）
+            e = p["elicit"]
+            url = e.get("mode") == "url"
+            item.update(kind="elicit", title=f"{e.get('server', 'MCP 服务器')} 问你：{e.get('message', '')}".strip(),
+                        body=(f"打开这个网址，弄完后按“好了”：{e.get('url', '')}" if url else
+                              f"{e.get('server', 'MCP 服务器')} 在要信息；不要在这里填密码"),
+                        choices=CHOICES["elicit"], server=e.get("server", ""), mode=e.get("mode", "form"),
+                        url=e.get("url", ""), fields=e.get("fields") or [])
+        elif "sampling" in p:                       # MCP 服务器想借用模型（第三节）：每次问你
+            sm = p["sampling"]
+            server = sm.get("server", "MCP 服务器")
+            item.update(kind="approval", title=f"{server} 想借用模型",
+                        body=(sm.get("preview", "") + (f"\n（最多 {sm['max_tokens']} token）" if sm.get("max_tokens") else "")),
+                        choices=CHOICES["approval"] + ["always"],
+                        call={"id": w.id, "name": "sampling", "args": {"server": server}})
+        elif "sub" in p:                              # 子 Agent 升上来的：照样能放行 / 改参数，注明来自哪个子 Agent
             note = f"（来自子 Agent：{p['sub']}）"
             if p.get("sub_kind") == "stuck":
                 item.update(kind="stuck", title=f"子 Agent「{p['sub']}」好像卡住了", body=p.get("reason", ""),
