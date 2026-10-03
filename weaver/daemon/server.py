@@ -54,9 +54,15 @@ class Handler(BaseHTTPRequestHandler):
         ("DELETE", r"/v1/tasks/([\w-]+)", "archive_task"),
         ("POST", r"/v1/tasks/([\w-]+)/input", "input"),
         ("POST", r"/v1/tasks/([\w-]+)/cancel", "cancel"),
+        ("GET", r"/v1/tasks/([\w-]+)/changes", "file_diff"),
+        ("POST", r"/v1/tasks/([\w-]+)/undo", "undo"),
+        ("GET", r"/v1/tasks/([\w-]+)/agents/([\w-]+)", "agent"),
+        ("POST", r"/v1/tasks/([\w-]+)/restore", "restore"),
         ("GET", r"/v1/waits", "list_waits"),
         ("POST", r"/v1/waits/([\w-]+)", "answer"),
         ("POST", r"/v1/blobs", "upload"),
+        ("GET", r"/v1/blobs/([0-9a-f]{64})", "blob"),
+        ("GET", r"/v1/prompts", "prompts"),
         ("GET", r"/v1/events", "events"),
         ("GET", r"/v1/search", "search"),
         # 设置页（design/settings.md）。具体路径排在 /mcp/{名字} 前面
@@ -77,6 +83,14 @@ class Handler(BaseHTTPRequestHandler):
         ("GET", r"/v1/settings/skills/([^/]+)", "settings_skill"),
         ("PUT", r"/v1/settings/skills/([^/]+)", "settings_skill_save"),
         ("DELETE", r"/v1/settings/skills/([^/]+)", "settings_skill_remove"),
+        ("GET", r"/v1/settings/permissions", "settings_permissions"),
+        ("DELETE", r"/v1/settings/permissions/rules", "settings_revoke_rule"),
+        ("DELETE", r"/v1/settings/permissions/projects", "settings_forget_project"),
+        ("GET", r"/v1/settings/memory", "settings_memory"),
+        ("POST", r"/v1/settings/memory", "settings_memory_create"),
+        ("GET", r"/v1/settings/memory/([^/]+)", "settings_memory_read"),
+        ("PUT", r"/v1/settings/memory/([^/]+)", "settings_memory_save"),
+        ("DELETE", r"/v1/settings/memory/([^/]+)", "settings_memory_remove"),
     ]
 
     def do_GET(self):
@@ -194,17 +208,60 @@ class Handler(BaseHTTPRequestHandler):
     def h_status(self):
         self._send(200, {**self.mgr.status(), "version": VERSION})
 
+    def _flag(self, key: str) -> bool:
+        return (self.query.get(key) or ["0"])[0] in ("1", "true")
+
     def h_list_tasks(self):
-        self._send(200, {"tasks": self.mgr.list()})
+        self._send(200, {"tasks": self.mgr.archived() if self._flag("archived") else self.mgr.list()})
 
     def h_create_task(self):
         d = self._json()
         opts = {k: d[k] for k in ("max_steps", "token_budget") if isinstance(d.get(k), int) and d[k] > 0}
+        if d.get("prompt") is not None:              # MCP prompt 代替 text（启动器里 / 选的，design/mcp2.md 第四节）
+            self._send(201, self.mgr.create_from_prompt(self._obj(d, "prompt"), workdir=self._str(d, "workdir") or None,
+                                                        **opts))
+            return
         self._send(201, self.mgr.create(self._str(d, "text"), workdir=self._str(d, "workdir") or None,
                                         attachments=self._ids(d), **opts))
 
+    def h_prompts(self):
+        workdir = (self.query.get("workdir") or [""])[0] or None
+        self._send(200, {"prompts": self.mgr.prompts(workdir)})
+
+    def h_blob(self, digest):
+        """工具结果里的图片（步骤的 images），App 取来显示缩略图。只给 BlobStore 里有的。"""
+        blobs = self.mgr.blobs
+        try:
+            data = blobs.get("blob://sha256-" + digest) if blobs is not None else None
+        except OSError:
+            data = None
+        if data is None:
+            raise HttpError(404, "not_found", "没有这个文件")
+        self.send_response(200)
+        mime = (self.query.get("mime") or [""])[0]
+        self.send_header("Content-Type", mime if re.fullmatch(r"image/[a-z0-9.+-]+", mime) else "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def h_get_task(self, task_id):
-        self._send(200, self.mgr.detail(task_id))
+        self._send(200, self.mgr.archived_detail(task_id) if self._flag("archived") else self.mgr.detail(task_id))
+
+    def h_file_diff(self, task_id):
+        path = (self.query.get("path") or [""])[0]
+        if not path:
+            raise HttpError(400, "bad_request", "path 不能为空")
+        self._send(200, self.mgr.file_diff(task_id, path, archived=self._flag("archived")))
+
+    def h_undo(self, task_id):
+        self._send(200, {"changes": self.mgr.undo(task_id, self._str(self._json(), "path", required=True))})
+
+    def h_agent(self, task_id, sub):
+        self._send(200, self.mgr.agent(task_id, sub, archived=self._flag("archived")))
+
+    def h_restore(self, task_id):
+        self._body()
+        self._send(200, self.mgr.restore(task_id))
 
     def h_rename_task(self, task_id):
         self._send(200, self.mgr.rename(task_id, self._str(self._json(), "title", required=True)))
@@ -226,11 +283,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def h_answer(self, wait_id):
         d = self._json()
-        args = d.get("args")
+        args, values = d.get("args"), d.get("values")
         if args is not None and not isinstance(args, dict):
             raise HttpError(400, "bad_request", "args 应该是一个对象")
+        if values is not None and not isinstance(values, dict):
+            raise HttpError(400, "bad_request", "values 应该是一个对象")
         self._send(200, self.mgr.answer(wait_id, self._str(d, "decision", required=True), args=args,
-                                        note=self._str(d, "note")))
+                                        note=self._str(d, "note"), values=values))
 
     def h_upload(self):
         if self.server.manager.uploads is None:
@@ -327,6 +386,49 @@ class Handler(BaseHTTPRequestHandler):
 
     def h_settings_skill_remove(self, name):
         self.settings.skill_remove(unquote(name))
+        self._send(204)
+
+    # ------------------------------------------------ 设置 › 权限、记忆
+
+    def h_settings_permissions(self):
+        from ..settings.permits import BUILTIN
+        self._send(200, {"rules": self.mgr.always_rules(), "projects": self.settings.permission_projects(),
+                         "builtin": BUILTIN})
+
+    def h_settings_revoke_rule(self):
+        d = self._json()
+        self.mgr.revoke_rule(self._str(d, "task", required=True), self._str(d, "key", required=True))
+        self._send(204)
+
+    def h_settings_forget_project(self):
+        self.settings.forget_project(self._str(self._json(), "root", required=True))
+        self._send(204)
+
+    def _roots(self) -> list[str]:
+        """记忆页列哪些项目：所有任务（含归档）的工作目录，最近的在前。"""
+        tasks = self.mgr.list() + self.mgr.archived()
+        return [t["workdir"] for t in sorted(tasks, key=lambda t: -t["updated"])]
+
+    def _scope(self) -> tuple[str, str]:
+        return (self.query.get("scope") or ["user"])[0], (self.query.get("root") or [""])[0]
+
+    def h_settings_memory(self):
+        self._send(200, self.settings.memory(self._roots()))
+
+    def h_settings_memory_create(self):
+        d = self._json()
+        scope, root = self._str(d, "scope") or "user", self._str(d, "root")
+        self._send(201, {"name": self.settings.memory_save(scope, root, None, self._str(d, "text", required=True))})
+
+    def h_settings_memory_read(self, name):
+        self._send(200, self.settings.memory_read(*self._scope(), unquote(name)))
+
+    def h_settings_memory_save(self, name):
+        text = self._str(self._json(), "text", required=True)
+        self._send(200, {"name": self.settings.memory_save(*self._scope(), unquote(name), text)})
+
+    def h_settings_memory_remove(self, name):
+        self.settings.memory_remove(*self._scope(), unquote(name))
         self._send(204)
 
     def h_events(self):

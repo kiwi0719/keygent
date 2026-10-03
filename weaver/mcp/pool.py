@@ -34,6 +34,8 @@ class McpPool:
         timeout = connect_timeout or float(os.environ.get("WEAVER_MCP_TIMEOUT") or 10)   # npx 第一次要下载，可调大
         self.manager = McpManager([], self.home / "mcp-logs", connect_timeout=timeout, idle=idle,
                                   retry_after=retry_after)
+        from ..stores import DirBlobStore
+        self.manager.blobs = DirBlobStore(self.home / "blobs")      # 工具返回的图片（和附件同一个仓库）
 
     def register(self, cfg: ServerConfig, root: Path | None) -> str:
         """登记一个服务器，返回它在管理器里的 key。stdio 服务器的工作目录按级别定，写进 key。"""
@@ -71,6 +73,7 @@ class TaskMcp(ContextProvider):
         self.current = None                          # McpTools；没有服务器时是 None
         self.sig = ((), ())                          # 没有服务器时的样子：没配 MCP 的任务从不“变”
         self.installed: set[str] = set()
+        self.caller = None                           # 这个任务（weaver.mcp.callers.Caller）：服务器提问、借模型时找它
         self._lock = threading.Lock()
 
     # ------------------------------------------------ 每轮开始前
@@ -94,19 +97,32 @@ class TaskMcp(ContextProvider):
         keys = {c.name: pool.register(c, self.conf.root) for c in usable} if pool else {}
         if keys:
             pool.manager.ensure(list(keys.values()), wait=wait)
-        state = tuple(sorted((n, k, pool.manager.servers[k].connected_once) for n, k in keys.items()))
+        # version：服务器说过“工具清单变了”，重新拉到的清单不一样就在这一轮换上（design/mcp2.md 第六节）
+        state = tuple(sorted((n, k, pool.manager.servers[k].connected_once, pool.manager.servers[k].version)
+                             for n, k in keys.items()))
         sig = (state, tuple(notes))
         with self._lock:
             if sig == self.sig:
                 return False
             self.sig = sig
-            self.current = McpTools(McpView(pool.manager if pool else None, keys), notes) if (keys or notes) else None
+            self.current = (McpTools(McpView(pool.manager if pool else None, keys, self.caller), notes)
+                            if (keys or notes) else None)
             new = self.current.tools() if self.current else {}
             for name in self.installed - set(new):
                 self.toolbox.tools.pop(name, None)
             self.toolbox.tools.update(new)
             self.installed = set(new)
         return True
+
+    # ------------------------------------------------ prompts（启动器里 / 选用）
+
+    def usable(self) -> dict[str, str]:
+        """能用的服务器：显示名 → 连接池里的 key（用户级 + 已信任的项目级）。不连接。"""
+        pool = self._pool()
+        if pool is None:
+            return {}
+        return {c.name: pool.register(c, self.conf.root) for c in self.conf.servers().values()
+                if not c.problem and self.conf.is_trusted(c)}
 
     # ------------------------------------------------ 信任（并进“信任这个项目吗”，见 agents.ProjectTrust）
 

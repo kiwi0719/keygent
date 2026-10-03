@@ -43,9 +43,13 @@ class UndoLog:
     def record(self, path: Path, before: bytes | None, after: bytes) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         entry = {"path": str(path.resolve()), "before": self.blobs.put(before) if before is not None else None,
-                 "after": sha(after), "ts": time.time()}
+                 "after": sha(after), "after_blob": self.blobs.put(after), "ts": time.time()}
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    def history(self) -> tuple[list[dict], set[int]]:
+        """所有改动记录（按时间）和已撤销的下标。给“这个任务改了哪些文件”用。"""
+        return self._load()
 
     def _load(self) -> tuple[list[dict], set[int]]:
         if not self.path.exists():
@@ -82,6 +86,31 @@ class UndoLog:
             f.write(json.dumps({"undone": idx}) + "\n")
         left = sum(1 for i in range(len(entries)) if i not in undone and i != idx)
         return msg + (f"（还可以再撤销 {left} 次）" if left else "")
+
+
+    def undo_file(self, path: str | Path) -> int:
+        """把一个文件恢复到这个会话第一次改它之前：倒着一次次撤销。返回撤销了几次。
+        中途发现文件被别人改过就停下报错（已经撤销的那几次保留）。"""
+        key = str(Path(path).resolve())
+        entries, undone = self._load()
+        todo = [i for i in range(len(entries) - 1, -1, -1) if i not in undone and entries[i]["path"] == key]
+        if not todo:
+            raise LookupError(f"{key} 没有可以撤销的改动")
+        n = 0
+        for i in todo:
+            e, p = entries[i], Path(key)
+            current = p.read_bytes() if p.exists() else None
+            if current is None or sha(current) != e["after"]:
+                raise RuntimeError(f"{p.name} 在那次改动之后又被改过（或被删了），为了不冲掉后来的修改，" +
+                                   ("拒绝撤销" if n == 0 else f"撤销了 {n} 次后停下"))
+            if e["before"] is None:
+                p.unlink()
+            else:
+                p.write_bytes(self.blobs.get(e["before"]))
+            with self.path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"undone": i}) + "\n")
+            n += 1
+        return n
 
 
 def _snippet(text: str, start: int, length: int, around: int = 3) -> str:

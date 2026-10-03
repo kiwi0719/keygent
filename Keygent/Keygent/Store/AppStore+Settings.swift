@@ -4,9 +4,9 @@ import AppKit
 // weaverd 在运行时一切经 /v1/settings/*；没在运行时只能改模型（直接写 ~/.weaver/.env，同以前）。
 
 enum SettingsTab: Int, CaseIterable {
-    case model, mcp, skills
+    case model, mcp, skills, permissions, memory
 
-    var title: String { ["模型", "MCP", "Skills"][rawValue] }
+    var title: String { ["模型", "MCP", "Skills", "权限", "记忆"][rawValue] }
 }
 
 /// 高级项：接口里的名字、显示的名字、没连上 weaverd 时的默认值说明（和 weaver/settings/model.py 一致）
@@ -110,6 +110,8 @@ struct SettingsState {
     var row = 0
     var mcp = McpPageState()
     var skills = SkillsPageState()
+    var permissions = PermissionsPageState()
+    var memory = MemoryPageState()
     var error: String? = nil
     /// 等第二次确认的操作：“delete:名字” / “discard”
     var armed: String? = nil
@@ -179,6 +181,12 @@ extension AppStore {
         case .skills:
             requestFocus(settings?.skills.editing != nil ? .settingsEditor : nil)
             loadSkills()
+        case .permissions:
+            requestFocus(nil)
+            loadPermissions()
+        case .memory:
+            requestFocus(settings?.memory.editing != nil ? .settingsEditor : nil)
+            loadMemories()
         }
     }
 
@@ -188,6 +196,7 @@ extension AppStore {
         guard let st = settings else { return false }
         if e.cmd, e.isChar(",") {
             let dirty = (st.tab == .mcp && st.mcp.dirty) || (st.tab == .skills && st.skills.dirty)
+                || (st.tab == .memory && st.memory.dirty)
             confirmDiscard(dirty: dirty) { settingsEscapeAll() }
             return true
         }
@@ -199,18 +208,20 @@ extension AppStore {
         case .model: handled = modelKey(e)
         case .mcp: handled = mcpKey(e)
         case .skills: handled = skillsKey(e)
+        case .permissions: handled = permissionsKey(e)
+        case .memory: handled = memoryKey(e)
         }
         // 按了别的键：取消“再按一次确认”
         if !handled, settings?.armed != nil, e.key != .escape { settings?.armed = nil }
         return handled
     }
 
-    private func settingsEscapeAll() {
+    func settingsEscapeAll() {
         if settings?.model.firstRun == true, settings?.offline == true { hidePanel() } else { closeSettings() }
     }
 
     /// 编辑器里 esc：有改动先提示，再按一次才放弃
-    private func confirmDiscard(dirty: Bool, back: () -> Void) {
+    func confirmDiscard(dirty: Bool, back: () -> Void) {
         if dirty, settings?.armed != "discard" {
             settings?.armed = "discard"
             return
@@ -221,7 +232,7 @@ extension AppStore {
     }
 
     /// ⌘⌫：第一次只是提示，第二次才真删
-    private func confirmDelete(_ name: String, run: () -> Void) {
+    func confirmDelete(_ name: String, run: () -> Void) {
         if settings?.armed == "delete:\(name)" {
             settings?.armed = nil
             run()
@@ -232,7 +243,7 @@ extension AppStore {
 
     /// 发一个改东西的请求：同一时间只发一个（连按 ⌘↵ 不会发两次）；回来时设置页已经关了、换了一份、
     /// 切了分页，就什么都不做（不抢焦点、不改别的页）。出错写在底栏。
-    private func submit<T>(_ request: @escaping () async throws -> T, done: @escaping (T) -> Void) {
+    func submit<T>(_ request: @escaping () async throws -> T, done: @escaping (T) -> Void) {
         guard let st = settings, !st.saving else { return }
         let id = st.id, tab = st.tab
         settings?.saving = true
@@ -250,7 +261,7 @@ extension AppStore {
     }
 
     /// 读东西的请求：回来时还是同一份、同一个分页才用
-    private func stillHere(_ id: UUID, _ tab: SettingsTab) -> Bool { settings?.id == id && settings?.tab == tab }
+    func stillHere(_ id: UUID, _ tab: SettingsTab) -> Bool { settings?.id == id && settings?.tab == tab }
 
     // MARK: 模型页
 
@@ -852,6 +863,10 @@ extension AppStore {
             settings?.mcp.importTop = ListWindow.clamp(st.mcp.importTop + rows, count: st.mcp.importRows.count)
         case .skills where st.skills.editing == nil:
             settings?.skills.top = ListWindow.clamp(st.skills.top + rows, count: st.skills.skills.count)
+        case .permissions:
+            settings?.permissions.top = ListWindow.clamp(st.permissions.top + rows, count: st.permissions.rows.count)
+        case .memory where st.memory.editing == nil:
+            settings?.memory.top = ListWindow.clamp(st.memory.top + rows, count: st.memory.rows.count)
         default:
             break
         }

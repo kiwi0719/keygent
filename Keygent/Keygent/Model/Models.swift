@@ -71,6 +71,22 @@ extension Step {
         return verb.count > 8 ? (t, "") : (verb, obj)
     }
 
+    /// 列表里显示的标题：■ □ 记号已经分出你说 / Agent 说，去掉「你：」「Agent：」前缀
+    var listTitle: String {
+        var t = title
+        if kind == .you, let r = text.range(of: "## 任务\n") {           // 子 Agent 收到的交代：背景摘录之后才是任务
+            t = text[r.upperBound...].split(separator: "\n").first.map(String.init) ?? t
+        }
+        for p in ["你：", "Agent："] where t.hasPrefix(p) { t = String(t.dropFirst(p.count)) }
+        // 列表里一行纯文字：Markdown 的加粗、行内代码记号去掉
+        return kind == .agent ? t.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "") : t
+    }
+
+    /// 「记住了 N 条」「记住：…」这类步骤：可以跳到设置 › 记忆
+    var isMemoryNote: Bool {
+        ["remember", "forget"].contains(tool) || (status == "note" && title.hasPrefix("记住了"))
+    }
+
     /// 对象是命令或路径的，用等宽字
     var monoTitle: Bool { ["bash", "read_file", "write_file", "edit_file", "find_files", "grep"].contains(tool) }
 
@@ -137,17 +153,15 @@ extension Step {
 extension WaitItem {
     /// 前端按 kind 写死的小字
     var sub: String {
+        // 琥珀底色和「● 等你」已经说了在等你；这里只写别处看不出来的
         let base: String
         switch kind {
-        case "approval": base = "停下来等你"
-        case "stuck": base = "它在原地打转"
         case "input": base = "不是你发的输入，要不要接"
         case "trust": base = "不信任也不影响任务，只是这些先不加载"
-        case "question": base = "它在等你回答"
         default: base = ""
         }
         guard let a = fromAgent, !a.isEmpty else { return base }
-        return "来自子 Agent「\(a)」· " + base
+        return "来自子 Agent「\(a)」" + (base.isEmpty ? "" : " · " + base)
     }
 
     /// 按钮文字：信任确认用“信任 / 不信任”，其余同 Choice.label
@@ -156,6 +170,7 @@ extension WaitItem {
             if c == "allow" { return "信任" }
             if c == "deny" { return "不信任" }
         }
+        if isSampling, c == "always", case .string(let s)? = call?.args["server"] { return "总是允许 \(s)" }
         return Choice.label(c)
     }
 
@@ -170,12 +185,29 @@ extension WaitItem {
     /// 文字输入框发出去的选择：卡住 = 给个提示；其它 = 拒绝并说明原因
     var noteChoice: String? { kind == "trust" ? nil : ["hint", "deny"].first { choices.contains($0) } }
 
-    /// 能一键放行的：信任确认不算（信任一个项目要你单独看过）
-    var isBulkApprovable: Bool { choices.contains("allow") && kind != "trust" }
+    /// 能一键放行的：信任确认、借用模型不算（要你单独看过）
+    var isBulkApprovable: Bool { choices.contains("allow") && kind != "trust" && !isSampling }
+
+    /// MCP 服务器问你（api.md v1.9）：表单 / 网址
+    var isElicit: Bool { kind == "elicit" }
+    /// MCP 服务器想借用模型
+    var isSampling: Bool { call?.name == "sampling" }
+
+    /// 卡片标题：路径缩短（家目录写成 ~）
+    var shownTitle: String {
+        if case .string(let p)? = call?.args["path"], p.hasPrefix("/") { return title.replacingOccurrences(of: p, with: Workspaces.short(p)) }
+        return title
+    }
+
+    /// 卡片正文：带 diff 的审批，路径已经在标题里了，原因只留前半句（“要写工作目录外…的路径”）
+    var shownBody: String {
+        guard diff?.isEmpty == false, let i = body.range(of: "：/") ?? body.range(of: "：~") else { return body }
+        return String(body[..<i.lowerBound])
+    }
 
     /// bash 的命令 / 其它工具的参数预览
     var callPreview: String? {
-        guard let call else { return nil }
+        guard let call, !isSampling else { return nil }
         if call.args.count == 1, let v = call.args.values.first, case .string(let s) = v { return s }
         guard let data = try? JSONEncoder.pretty.encode(call.args) else { return nil }
         return String(data: data, encoding: .utf8)
@@ -194,6 +226,9 @@ enum Choice {
         case "hint": return "给个提示"
         case "answer": return "发给它"
         case "skip": return "你自己定"
+        case "accept": return "交上去"
+        case "decline": return "不给"
+        case "cancel": return "取消这次调用"
         default: return c
         }
     }
@@ -211,7 +246,8 @@ enum CapsuleState: Equatable {
     init(_ s: StatusSummary?) {
         guard let s else { self = .offline; return }
         if s.waiting > 0, let w = s.firstWait {
-            self = .waiting(task: w.task, title: w.taskTitle, more: s.waiting - 1, question: w.kind == "question")
+            self = .waiting(task: w.task, title: w.taskTitle, more: s.waiting - 1,
+                            question: w.kind == "question" || w.kind == "elicit")
         } else if let e = s.error {
             self = .error(task: e.task, title: e.taskTitle)
         } else if s.running > 0 {

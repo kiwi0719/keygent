@@ -11,6 +11,8 @@ final class CapsuleController: NSObject {
     var onOpen: () -> Void = {}
     var onLauncher: () -> Void = {}
     var onSettings: () -> Void = {}
+    /// 鼠标进出胶囊（胶囊下的小卡）
+    var onHover: (Bool) -> Void = { _ in }
     private static let autosaveName = "keygent.capsule"
 
     init(store: AppStore) {
@@ -33,6 +35,8 @@ final class CapsuleController: NSObject {
             button.action = #selector(clicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.setAccessibilityLabel("Keygent")
+            button.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                                  owner: self, userInfo: nil))
         }
         refresh()
     }
@@ -52,6 +56,15 @@ final class CapsuleController: NSObject {
         }
     }
 
+    @objc func mouseEntered(with event: NSEvent) { onHover(true) }
+    @objc func mouseExited(with event: NSEvent) { onHover(false) }
+
+    /// 胶囊在屏幕上的位置（小卡挂在它下面）
+    var screenFrame: NSRect? {
+        guard let b = item.button, let w = b.window else { return nil }
+        return w.convertToScreen(b.convert(b.bounds, to: nil))
+    }
+
     @objc private func clicked(_ sender: NSStatusBarButton) {
         guard let ev = NSApp.currentEvent else { return }
         if ev.type == .rightMouseUp || ev.modifierFlags.contains(.control) {
@@ -63,8 +76,7 @@ final class CapsuleController: NSObject {
 
     private func showMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "打开启动器    ⌥空格", action: #selector(openLauncher), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "打开胶囊里的事    ⌘⇧空格", action: #selector(openTarget), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "打开启动器    ⌘⇧空格", action: #selector(openLauncher), keyEquivalent: "").target = self
         let q = menu.addItem(withTitle: "等你的事（\(store.waits.count)）", action: #selector(openQueue), keyEquivalent: "")
         q.target = self
         menu.addItem(.separator())
@@ -89,8 +101,6 @@ final class CapsuleController: NSObject {
         store.go(.launcher)
         onLauncher()
     }
-
-    @objc private func openTarget() { onOpen() }
 
     @objc private func openQueue() {
         store.openQueue()

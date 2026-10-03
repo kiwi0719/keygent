@@ -20,7 +20,8 @@ Weaver 是一个按 `main.md`（开源 AI Agent 架构教程）一层层搭起�
 | [todo-loop.md](todo-loop.md) | todo 清单；防死循环（分层：提醒 → 问人 / 停下）；预算提醒 | 已实现 |
 | [redaction.md](redaction.md) | 脱敏：gitleaks 精选规则 + 环境变量里的已知值；进账本前脱敏；防写回占位符 | 已实现 |
 | [mcp.md](mcp.md) | MCP：官方 SDK（可选依赖）、工具 / 资源 / 说明、工具多时的延迟模式、项目级信任；第九节：接进 weaverd（所有任务共用连接） | 已实现（需要 `.venv`） |
-| [mcp2.md](mcp2.md) | MCP 第二期：登录（OAuth / gh / 设备码）、服务器提问、借用模型、prompts、图片、工具清单变化、roots | 设计中 |
+| [mcp2.md](mcp2.md) | MCP 第二期：登录（OAuth / gh / 设备码）、服务器提问、借用模型、prompts、图片、工具清单变化、roots | 已实现 |
+| [keygent-gaps.md](keygent-gaps.md) | Keygent 补缺：diff / 撤销、清单、权限页、记忆页、子 Agent 过程、归档恢复、胶囊小卡、图片 | 已实现 |
 | [settings.md](settings.md) | 设置页：模型 · MCP · Skills，全键盘；weaverd 的 `/v1/settings/*`（计划：[settings-plan.md](settings-plan.md)） | 第一期已实现 |
 | [daemon.md](daemon.md) | 常驻服务 weaverd（阶段 A）：任务管理、工作线程、本机 HTTP + SSE 接口、步骤翻译、对接 Keygent、launchd | 已实现（第 1–6 步） |
 | [api.md](api.md) | weaverd 的接口说明（给 Keygent，带 JSON 示例和 Swift 对照） | 已实现 |
@@ -64,7 +65,7 @@ Weaver 是一个按 `main.md`（开源 AI Agent 架构教程）一层层搭起�
 |---|---|
 | 内核 / 执行 | 边生成边执行、Bash 失败取消同批（长命令转后台、取消打断命令已做） |
 | 子 Agent | 给运行中的子 Agent 追加指令、续上旧的子 Agent、能改文件的后台子 Agent（要 git worktree）、重启后接着跑后台子 Agent、团队协作 |
-| MCP | OAuth、prompts（斜杠命令）、elicitation、Weaver 自己当 MCP 服务器 |
+| MCP | Weaver 自己当 MCP 服务器 |
 | 模型接入 | OpenAI Responses API、Gemini 原生、服务端工具、备用模型 |
 | 压缩 | 压缩后重读最近的文件（找回原文、压缩前提取记忆已做） |
 | 记忆 | 按相关度挑记忆、“做梦”式整合（自动提取、搜索历史任务已做） |

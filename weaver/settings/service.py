@@ -13,7 +13,7 @@ from typing import Callable
 from ..errors import BadRequest, NotFound
 from ..mcp import auth
 from ..mcp.config import parse
-from . import mcp, model, skills
+from . import mcp, memories, model, permits, skills
 
 DESKTOP = "~/Library/Application Support/Claude/claude_desktop_config.json"
 
@@ -202,3 +202,28 @@ class Settings:
     def skill_remove(self, name: str) -> None:
         with self._lock:
             skills.remove_skill(self.home, self.claude_home, name)
+
+    # ------------------------------------------------ 权限（信任过的项目；“总是允许”在任务管理器里）
+
+    def permission_projects(self) -> list[dict]:
+        return permits.projects(self.home)
+
+    def forget_project(self, root: str) -> None:
+        with self._lock:
+            permits.forget(self.home, root)
+
+    # ------------------------------------------------ 记忆
+
+    def memory(self, roots: list[str]) -> dict:
+        return memories.list_all(self.home, roots)
+
+    def memory_read(self, scope: str, root: str, name: str) -> dict:
+        return memories.read(self.home, scope, root, name)
+
+    def memory_save(self, scope: str, root: str, name: str | None, text: str) -> str:
+        with self._lock:
+            return memories.save(self.home, scope, root, name, text)
+
+    def memory_remove(self, scope: str, root: str, name: str) -> None:
+        with self._lock:
+            memories.remove(self.home, scope, root, name)

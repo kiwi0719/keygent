@@ -17,12 +17,23 @@ struct RootView: View {
                 }
             }
         }
-        .frame(minHeight: store.editor != nil ? 480 : nil, alignment: .top)
+        .frame(minHeight: store.editor != nil ? 480 : (store.diffSheet != nil || store.agentView != nil ? 600 : nil),
+               alignment: .top)
         .overlay {
             if store.editor != nil {
                 ZStack {
                     Color.black.opacity(0.12).onTapGesture { store.editor = nil }
                     ArgsEditorView()
+                }
+            } else if store.diffSheet != nil {
+                ZStack {
+                    Color.black.opacity(0.12).onTapGesture { store.diffSheet = nil; store.armed = nil }
+                    DiffSheetView()
+                }
+            } else if store.agentView != nil {
+                ZStack {
+                    Color.black.opacity(0.12).onTapGesture { store.closeAgent() }
+                    AgentSheetView()
                 }
             }
         }

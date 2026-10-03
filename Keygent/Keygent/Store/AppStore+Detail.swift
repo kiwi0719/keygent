@@ -1,21 +1,24 @@
 import Foundation
 
-// MARK: - ⑤ 任务详情：时间线回看
+// MARK: - ⑤ 任务详情：过程面板的放大版（左边步骤，最下面一行「现在」；右边看选中的那个）
 
 extension AppStore {
     var detailNodes: [Step] { taskSteps }
-    var detailAt: Int { detail.at < 0 ? max(0, detailNodes.count - 1) : min(detail.at, max(0, detailNodes.count - 1)) }
-    var detailLive: Bool { detail.at < 0 || detail.at >= detailNodes.count - 1 }
+    var detailAt: Int { min(max(detail.at, 0), max(0, detailNodes.count - 1)) }
+    /// 选中的是最下面那行「现在」（结论 / 正在跑的这一轮）
+    var detailLive: Bool { detail.at < 0 || detailNodes.isEmpty }
 
+    /// ↑↓：在步骤和「现在」之间走（「现在」排在最后）
     func detailMove(_ d: Int) {
         let n = detailNodes.count
         guard n > 0 else { return }
-        let i = max(0, min(n - 1, detailAt + d))
-        detail.at = i == n - 1 ? -1 : i
+        let cur = detail.at < 0 ? n : detail.at
+        let i = max(0, min(n, cur + d))
+        detail.at = i == n ? -1 : i
     }
 
     func detailJump(_ i: Int) {
-        detail.at = i >= detailNodes.count - 1 ? -1 : i
+        detail.at = i >= detailNodes.count ? -1 : i
     }
 
     func detailSend() {
@@ -64,16 +67,13 @@ extension AppStore {
             if e.key == .enter, !e.cmd { detailSend(); return true }
             return false
         }
-        if e.plain, e.key == .left || e.key == .right {
-            detailMove(e.key == .right ? 1 : -1)
+        if e.plain, [.up, .down, .left, .right].contains(e.key) {
+            detailMove(e.key == .down || e.key == .right ? 1 : -1)
             return true
         }
         if e.key == .tab { requestFocus(.detail); return true }
         if e.cmd, e.isChar("c") { detailCopy(); return true }
-        if e.key == .escape {
-            if !detailLive { detail.at = -1 } else { detailBack() }
-            return true
-        }
+        if e.key == .escape { detailBack(); return true }
         return false
     }
 }
@@ -84,12 +84,15 @@ extension AppStore {
     /// 窗口式列表（ListWindow）：滚轮一格挪一条，编号跟着重排。
     func handleScroll(rows: Int) {
         if settings != nil { settingsScroll(rows); return }
+        if agentView != nil { agentScroll(rows); return }
         switch route {
         case .launcher:
             if launcher.picker { fileScroll(rows) }
             else if launcher.wsPicker { wsScroll(rows) }
+            else if launcher.archivedMode { archScroll(rows) }
+            else if launcherSlashMode { promptScroll(rows) }
             else if launcherSearchMode { resultScroll(rows) }
-            else if launcherFull { launcherScroll(rows) }
+            else { launcherScroll(rows) }
         case .queue where queue.expanded:
             queue.top = ListWindow.clamp(queue.top + rows, count: queue.list.count)
         case .task where task.proc && task.stepsHovered:

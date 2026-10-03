@@ -190,3 +190,19 @@ design/api.md            v1.8
 - `weaver mcp` 列出各服务器状态。
 
 没实测：真的第三方服务（Notion / Linear）的浏览器授权——需要你在浏览器里点“允许”，等你方便时一起做；GitHub 设备码——等 Client ID。
+
+### 第 2–7 步：调用中途等人、提问、借模型、图片、prompts、清单变化、roots（2026-10-03，已完成）
+
+- `weaver/mcp/callers.py`：`Caller`（一个任务：问人、借模型、工作目录、总是允许）、`Calls`（每个服务器正在进行的调用）+ contextvar。新协议里提问在 `call_tool` 里回调，contextvar 直接拿到；旧协议按“这个服务器上最近开始的调用”找。
+- `McpManager`：Client 不设读超时，调用自己计时（`_wait`），等人回答时暂停；回调 `elicitation_callback` / `sampling_callback` / `list_roots_callback` / `message_handler`；新协议用 `client.listen(tools_list_changed=True)` 订阅清单变化，重新拉时 `cache_mode="refresh"`（SDK 有响应缓存）。
+- `Runner.ask_during_call`：同 `ask_up`。内核：一轮结束时，这一轮里没回答的等待（外部输入的确认除外）一律作废。
+- 图片：工具 / 资源结果是“文字 + 图片引用”的片段列表（`weaver/parts.py`），图片进 BlobStore；Anthropic 放进 tool_result，OpenAI 兼容协议补一条用户消息。
+- prompts：`GET /v1/prompts`、`POST /v1/tasks` 的 `prompt`。
+- App：提问的表单卡（全键盘）、借模型的审批（总是允许 <服务器>）、启动器 `/`、步骤里的缩略图。
+- 测试 `tests/test_mcp2.py` 8 项（测试服务器 `FAKE_MCP_V2=1` 时多 deploy / summarize / picture / where / grow 和 review prompt，用 SDK 的 `Resolve` + `Elicit` / `Sample` / `ListRoots` 写，新旧协议都能跑）。
+
+**实现中发现、和设计不一样的**：
+
+1. SDK 2.2 默认协商到 2026-07-28：服务器不能在调用中途单独发请求（“no back-channel”），要返回 input_required 让客户端补齐重试；SDK 在 `call_tool` 里替我们调回调，所以 contextvar 这条路是主路。
+2. 新协议里“工具清单变了”不是通知，是 `subscriptions/listen`。
+3. 借用模型的用量算进发起调用的那一步（工具结果的 `usage`），不另记 `ActionCompleted(kind=sampling)`：内核会把不认识的 kind 当工具结果。

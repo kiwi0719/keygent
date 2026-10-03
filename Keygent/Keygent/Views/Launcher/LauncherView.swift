@@ -19,9 +19,18 @@ struct LauncherView: View {
                 TextField(
                     "",
                     text: $store.launcher.query,
-                    prompt: Text(picked != nil ? "接着说，或者直接按 ↵ 打开" : "交代一件新事，或从下面选一个接着做；? 开头 = 搜以前的任务")
+                    prompt: Text(picked != nil ? "接着说，或者直接按 ↵ 打开" : "")
                         .foregroundColor(K.text4)
                 )
+                .overlay(alignment: .leading) {
+                    // 空着的时候轮流提示能做什么，一开始打字就停
+                    if picked == nil && store.launcher.query.isEmpty {
+                        RotatingHint(lines: ["交代一件新事", "或者从下面选一个接着做", "? 开头搜以前的任务", "/ 开头用 MCP 提示词"])
+                            .font(KFont.sans(20, .medium))
+                            .foregroundStyle(K.text4)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .textFieldStyle(.plain)
                 .font(KFont.sans(20, .medium))
                 .foregroundStyle(K.ink)
@@ -38,6 +47,12 @@ struct LauncherView: View {
 
             if store.connection == .offline {
                 OfflineNotice()
+            } else if store.launcher.archivedMode {
+                ArchivedList()
+            } else if let p = store.launcher.promptArgs {
+                PromptArgsForm(prompt: p, focused: $focused)
+            } else if store.launcherSlashMode {
+                PromptList()
             } else if store.launcherSearchMode {
                 SearchResults()
             } else {
@@ -85,6 +100,7 @@ struct LauncherView: View {
     // MARK: 附件 / 继续 chips
 
     private var chips: some View {
+        HStack(alignment: .top, spacing: 8) {
         FlowLayout(spacing: 8, lineSpacing: 8) {
             if let t = store.pickedTask {
                 HStack(spacing: 8) {
@@ -125,6 +141,19 @@ struct LauncherView: View {
             }
             .buttonStyle(PressableStyle())
         }
+            Spacer(minLength: 8)
+            Button { store.openSettings() } label: {      // 设置的入口（⌘, 也行）
+                HStack(spacing: 5) {
+                    Kbd("⌘,")
+                    Text("设置")
+                }
+                .font(KFont.sans(12))
+                .foregroundStyle(K.text3)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+        }
         .padding(.horizontal, 24)
         .padding(.top, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -161,16 +190,23 @@ struct LauncherView: View {
 
     private var recentList: some View {
         let L = store.launcher
-        let full = store.launcherFull
         let w = store.launcherWindow
 
         return VStack(spacing: 2) {
             HStack {
-                SectionLabel("最近任务 · 选一个接着做")
+                SectionLabel("最近任务")
                 Spacer()
-                Text("⌘ + 数字 = 眼前第几条")
+                Button { store.openArchived() } label: {
+                    HStack(spacing: 5) {
+                        Kbd("⌘⇧A")
+                        Text("已归档")
+                    }
                     .font(KFont.sans(12))
-                    .foregroundStyle(K.text4)
+                    .foregroundStyle(K.text3)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .padding(.leading, 10)
             }
             .padding(.horizontal, 8)
             .padding(.top, 4)
@@ -198,31 +234,7 @@ struct LauncherView: View {
                 }
             }
 
-            if store.loadedOnce, L.shown < store.tasks.count {
-                Button { store.launcherMore() } label: {
-                    HStack(spacing: 4) {
-                        Text("展开更多")
-                            .font(KFont.sans(13))
-                            .foregroundStyle(K.text2)
-                        Text("· 还有 \(store.tasks.count - L.shown) 条 · 或在最后一条按 ↓")
-                            .font(KFont.mono(11))
-                            .foregroundStyle(K.text4)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(K.dash, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableStyle())
-                .padding(.horizontal, 8)
-                .padding(.top, 6)
-                .padding(.bottom, 4)
-            }
-
-            if full, store.tasks.count > LauncherState.viewCount {
+            if store.tasks.count > LauncherState.viewCount {
                 WindowBar(window: w.top..<(w.top + w.count), total: store.tasks.count) { store.launcherScroll($0) }
                 .padding(.horizontal, 8)
                 .padding(.top, 8)
@@ -237,6 +249,121 @@ struct LauncherView: View {
 
 // MARK: - 子视图
 
+/// 输入框空着时的提示：几句话轮流往上滚，每句停 3 秒（开了“减少动态效果”就不动，只显示第一句）
+private struct RotatingHint: View {
+    let lines: [String]
+    @State private var i = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Text(lines[i % lines.count])
+                .id(i)
+                .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+                                        removal: .move(edge: .top).combined(with: .opacity)))
+        }
+        .clipped()
+        .task {
+            guard !reduceMotion, lines.count > 1 else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                withAnimation(.easeInOut(duration: 0.35)) { i += 1 }
+            }
+        }
+    }
+}
+
+/// 输入以 / 开头：MCP 服务器提供的提示词
+private struct PromptList: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let L = store.launcher
+        let list = store.filteredPrompts
+        let win = store.promptWindow
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                SectionLabel("MCP 提示词" + (list.isEmpty ? "" : " · \(list.count) 个"))
+                Spacer()
+                if L.promptsLoading { ProgressView().controlSize(.mini) }
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+            if list.isEmpty && !L.promptsLoading {
+                Text(L.prompts.isEmpty ? "这个工作区里能用的 MCP 服务器没有提供提示词（设置 › MCP 里加服务器）"
+                     : "没有匹配“\(store.promptFilter)”的提示词")
+                    .font(KFont.sans(13))
+                    .foregroundStyle(K.text4)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 22)
+            }
+            ForEach(win, id: \.self) { i in
+                let p = list[i]
+                Button { if L.promptPick == i { store.choosePrompt(p) } else { store.launcher.promptPick = i } } label: {
+                    HStack(spacing: 12) {
+                        Text(p.command).font(KFont.mono(13, .medium)).foregroundStyle(K.ink).lineLimit(1)
+                        Text(p.description.isEmpty ? p.title : p.description)
+                            .font(KFont.sans(12)).foregroundStyle(K.text3).lineLimit(1)
+                        Spacer(minLength: 8)
+                        if !p.arguments.isEmpty {
+                            Text(p.arguments.map { $0.name + ($0.required ? "*" : "") }.joined(separator: " "))
+                                .font(KFont.mono(11)).foregroundStyle(K.text4).lineLimit(1)
+                        }
+                        Kbd("⌘\(i - win.lowerBound + 1)", active: L.promptPick == i, size: 12, weight: .medium, minWidth: 34)
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                }
+                .buttonStyle(RowStyle(selected: L.promptPick == i, selectedFill: .white, radius: 8, selectedStroke: K.ink))
+            }
+            if list.count > ListWindow.size {
+                WindowBar(window: win, total: list.count, unit: "个", up: "↑", down: "↓") { store.promptScroll($0) }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+}
+
+/// 选了带参数的提示词：一张白卡，一行一个参数（必填的带小标签），tab 换行，↵ 交出去
+private struct PromptArgsForm: View {
+    @Environment(AppStore.self) private var store
+    let prompt: PromptItem
+    var focused: FocusState<InputField?>.Binding
+
+    var body: some View {
+        let L = store.launcher
+        let need = prompt.arguments.filter(\.required).count
+        VStack(alignment: .leading, spacing: 8) {
+            FormCard(title: prompt.command, subtitle: prompt.description,
+                     trailing: need > 0 ? "必填 \(need) / 共 \(prompt.arguments.count)" : "\(prompt.arguments.count) 个参数，都可以不填",
+                     keys: [KeyHint("tab", "换行"), KeyHint("↵", L.argCur == prompt.arguments.count - 1 ? "交出去" : "下一个"),
+                            KeyHint("⌘↵", "直接交出去"), KeyHint("esc", "换一个")]) {
+                ForEach(Array(prompt.arguments.enumerated()), id: \.offset) { i, a in
+                    FormRow(name: a.name, required: a.required, selected: L.argCur == i,
+                            last: i == prompt.arguments.count - 1,
+                            onTap: { store.launcher.argCur = i; store.requestFocus(.promptArg(i)) }) {
+                        FormField(text: Binding(get: { store.launcher.argValues[safe: i] ?? "" },
+                                                set: { if store.launcher.argValues.indices.contains(i) { store.launcher.argValues[i] = $0 } }),
+                                  placeholder: a.description.isEmpty ? (a.required ? "要填" : "可以不填") : a.description,
+                                  focused: focused, field: .promptArg(i))
+                    }
+                }
+            }
+            if L.submitting {
+                HStack(spacing: 6) { ProgressView().controlSize(.mini); Text("正在交给 Weaver……") }
+                    .font(KFont.sans(12)).foregroundStyle(K.green).padding(.horizontal, 4)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+    }
+}
+
 /// 搜索结果：命中的任务、哪一类记录、前后一段摘录
 private struct SearchResults: View {
     @Environment(AppStore.self) private var store
@@ -249,11 +376,6 @@ private struct SearchResults: View {
                 SectionLabel(L.searchedFor.isEmpty ? "搜索以前的任务" : "“\(L.searchedFor)” · \(L.results.count) 条")
                 Spacer()
                 if L.searching { ProgressView().controlSize(.mini) }
-                if !L.results.isEmpty {
-                    Text("⌘ + 数字 = 眼前第几条")
-                        .font(KFont.sans(12))
-                        .foregroundStyle(K.text4)
-                }
             }
             .padding(.horizontal, 8)
             .padding(.top, 4)
@@ -276,7 +398,7 @@ private struct SearchResults: View {
                                         .font(KFont.sans(14, .bold))
                                         .foregroundStyle(K.ink)
                                         .lineLimit(1)
-                                    Text(h.sub.isEmpty ? h.kind : "子 Agent · \(h.kind)")
+                                    Text((h.archived ? "已归档 · " : "") + (h.sub.isEmpty ? h.kind : "子 Agent · \(h.kind)"))
                                         .font(KFont.sans(11, .medium))
                                         .foregroundStyle(K.text3)
                                         .padding(.horizontal, 6)

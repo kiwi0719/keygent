@@ -62,6 +62,22 @@ final class WeaverClient {
 
     func tasks() async throws -> [TaskSummary] { (try await get("/v1/tasks") as TaskList).tasks }
 
+    func prompts(workdir: String?) async throws -> [PromptItem] {
+        struct L: Decodable { var prompts: [PromptItem] }
+        return (try await get("/v1/prompts?" + Self.query(["workdir": workdir ?? ""])) as L).prompts
+    }
+
+    func createTask(prompt: PromptItem, arguments: [String: String], workdir: String?) async throws -> TaskSummary {
+        var body: [String: Any] = ["prompt": ["server": prompt.server, "name": prompt.name, "arguments": arguments]]
+        if let workdir { body["workdir"] = workdir }
+        return try await send("POST", "/v1/tasks", json: body)
+    }
+
+    /// 工具返回的图片
+    func blob(_ id: String, mime: String) async throws -> Data {
+        try await raw("GET", "/v1/blobs/\(id.pathEscaped)?" + Self.query(["mime": mime]), body: nil, headers: [:]).0
+    }
+
     func createTask(text: String, workdir: String? = nil, attachments: [String] = []) async throws -> TaskSummary {
         var body: [String: Any] = ["text": text]
         if let workdir { body["workdir"] = workdir }
@@ -69,7 +85,37 @@ final class WeaverClient {
         return try await send("POST", "/v1/tasks", json: body)
     }
 
-    func task(_ id: String) async throws -> TaskDetail { try await get("/v1/tasks/\(id.pathEscaped)") }
+    func task(_ id: String, archived: Bool = false) async throws -> TaskDetail {
+        try await get("/v1/tasks/\(id.pathEscaped)" + (archived ? "?archived=1" : ""))
+    }
+
+    // MARK: 改过的文件、子 Agent、归档（api.md v1.9）
+
+    func archivedTasks() async throws -> [TaskSummary] { (try await get("/v1/tasks?archived=1") as TaskList).tasks }
+
+    func restore(_ id: String) async throws -> TaskSummary {
+        try await send("POST", "/v1/tasks/\(id.pathEscaped)/restore", json: nil)
+    }
+
+    func fileDiff(_ id: String, path: String, archived: Bool = false) async throws -> FileDiff {
+        try await get("/v1/tasks/\(id.pathEscaped)/changes?" + Self.query(["path": path, "archived": archived ? "1" : "0"]))
+    }
+
+    func undo(_ id: String, path: String) async throws -> [FileChange] {
+        struct R: Decodable { var changes: [FileChange] }
+        return (try await send("POST", "/v1/tasks/\(id.pathEscaped)/undo", json: ["path": path]) as R).changes
+    }
+
+    func agent(_ id: String, sub: String, archived: Bool = false) async throws -> AgentDetail {
+        try await get("/v1/tasks/\(id.pathEscaped)/agents/\(sub.pathEscaped)" + (archived ? "?archived=1" : ""))
+    }
+
+    static func query(_ items: [String: String]) -> String {
+        var comps = URLComponents()
+        comps.queryItems = items.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        // URLComponents 不转义 +，服务端会把它当空格
+        return (comps.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B")
+    }
 
     func rename(_ id: String, title: String) async throws -> TaskSummary {
         try await send("PATCH", "/v1/tasks/\(id.pathEscaped)", json: ["title": title])
@@ -90,9 +136,10 @@ final class WeaverClient {
     func waits() async throws -> [WaitItem] { (try await get("/v1/waits") as WaitList).waits }
 
     /// decision: allow / deny / always / continue / stop / hint；「改一下」= allow + args
-    func answer(_ waitID: String, decision: String, note: String? = nil, args: [String: JSONValue]? = nil) async throws -> TaskSummary {
-        struct Body: Encodable { var decision: String; var note: String?; var args: [String: JSONValue]? }
-        let data = try JSONEncoder().encode(Body(decision: decision, note: note, args: args))
+    func answer(_ waitID: String, decision: String, note: String? = nil, args: [String: JSONValue]? = nil,
+                values: [String: JSONValue]? = nil) async throws -> TaskSummary {
+        struct Body: Encodable { var decision: String; var note: String?; var args: [String: JSONValue]?; var values: [String: JSONValue]? }
+        let data = try JSONEncoder().encode(Body(decision: decision, note: note, args: args, values: values))
         let (d, _) = try await raw("POST", "/v1/waits/\(waitID.pathEscaped)", body: data, headers: ["Content-Type": "application/json"])
         return try decode(d)
     }
@@ -202,6 +249,42 @@ final class WeaverClient {
 
     func skillRemove(_ name: String) async throws {
         try await sendVoid("DELETE", "/v1/settings/skills/\(name.pathEscaped)", json: nil)
+    }
+
+    // MARK: 设置 › 权限、记忆（api.md v1.9）
+
+    func permissions() async throws -> PermissionList { try await get("/v1/settings/permissions") }
+
+    func revokeRule(task: String, key: String) async throws {
+        try await sendVoid("DELETE", "/v1/settings/permissions/rules", json: ["task": task, "key": key])
+    }
+
+    func forgetProject(_ root: String) async throws {
+        try await sendVoid("DELETE", "/v1/settings/permissions/projects", json: ["root": root])
+    }
+
+    func memories() async throws -> MemoryList { try await get("/v1/settings/memory") }
+
+    private func memoryPath(_ name: String, scope: String, root: String) -> String {
+        "/v1/settings/memory/\(name.pathEscaped)?" + Self.query(["scope": scope, "root": root])
+    }
+
+    func memory(_ name: String, scope: String, root: String) async throws -> MemoryDetail {
+        try await get(memoryPath(name, scope: scope, root: root))
+    }
+
+    func memoryCreate(scope: String, root: String, text: String) async throws -> String {
+        struct Named: Decodable { var name: String }
+        return (try await send("POST", "/v1/settings/memory", json: ["scope": scope, "root": root, "text": text]) as Named).name
+    }
+
+    func memorySave(_ name: String, scope: String, root: String, text: String) async throws -> String {
+        struct Named: Decodable { var name: String }
+        return (try await send("PUT", memoryPath(name, scope: scope, root: root), json: ["text": text]) as Named).name
+    }
+
+    func memoryRemove(_ name: String, scope: String, root: String) async throws {
+        try await sendVoid("DELETE", memoryPath(name, scope: scope, root: root), json: nil)
     }
 
     // MARK: 事件流的请求

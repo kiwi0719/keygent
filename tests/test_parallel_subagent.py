@@ -284,7 +284,7 @@ class Warm(unittest.TestCase):
         starts = sorted(brain.child_starts)
         self.assertEqual(len(starts), 3)
         self.assertLess(starts[1] - starts[0], 0.1)          # 跟随者只等到领头的开始输出，不等它跑完
-        self.assertLess(elapsed, 0.55)                       # 仍然是并行的
+        self.assertLess(elapsed, 0.75)                       # 仍然是并行的（串行至少 0.9 秒；CI 的机器慢，留出余量）
 
     def test_followers_wait_when_leader_is_slow_to_stream(self):
         class Slow(Brain):

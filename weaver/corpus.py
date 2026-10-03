@@ -31,8 +31,8 @@ def entry_text(ev: dict) -> tuple[str, str]:
                  if p.get("type") == "tool_call"]
         return "模型", "\n".join(x for x in [text] + calls if x)
     if t == "ActionCompleted" and ev.get("kind") == "tool":
-        out = ev.get("output")
-        return "工具结果", out if isinstance(out, str) else json.dumps(out, ensure_ascii=False)
+        from .parts import text_of
+        return "工具结果", text_of(ev.get("output"))
     if t == "ActionCompleted" and ev.get("kind") == "compact" and (ev.get("output") or {}).get("summary"):
         return "压缩摘要", ev["output"]["summary"]
     return "", ""

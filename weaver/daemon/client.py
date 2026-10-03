@@ -187,6 +187,29 @@ def ask_wait(api: Api, w: dict, read=input, write=print) -> None:
         except ClientError as e:
             write(f"{DIM}  [{e}]{RESET}")           # 比如在 Keygent 那边已经回答了
         return
+    if w["kind"] == "elicit":                               # MCP 服务器问你：逐个字段问（design/mcp2.md 第二节）
+        write(f"\n  ? {w['title']}\n  {DIM}{w.get('body', '')}{RESET}")
+        try:
+            if w.get("mode") == "url":
+                ans = read("  弄完了按回车；[n] 不给  [c] 取消这次调用：").strip().lower()
+                body = {"decision": {"n": "decline", "c": "cancel"}.get(ans, "accept")}
+            else:
+                values = {}
+                for f in w.get("fields") or []:
+                    hint = f"（{' / '.join(f['options'])}）" if f.get("options") else \
+                        "（y / n）" if f.get("type") == "boolean" else ""
+                    v = read(f"  {f.get('title') or f['name']}{'*' if f.get('required') else ''}{hint}：").strip()
+                    if f.get("type") == "boolean" and v:
+                        v = v.lower() in ("y", "yes", "true", "是")
+                    if v != "":
+                        values[f["name"]] = v
+                ans = read("  交上去？[y] 交  [n] 不给  [c] 取消这次调用：").strip().lower()
+                body = ({"decision": "accept", "values": values} if ans in ("", "y", "yes") else
+                        {"decision": "cancel"} if ans == "c" else {"decision": "decline"})
+            api.call("POST", f"/v1/waits/{w['id']}", body)
+        except ClientError as e:
+            write(f"{DIM}  [{e}]{RESET}")
+        return
     write(f"\n  ? {w['title']}" + (f"  {DIM}({w['body']}){RESET}" if w.get("body") else ""))
     choices = w["choices"]
     while True:

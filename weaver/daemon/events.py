@@ -11,7 +11,6 @@ import queue
 import threading
 from collections import deque
 
-from .humanize import steps as to_steps
 
 BUFFER = 10_000
 CLIENT_QUEUE = 1_000
@@ -95,7 +94,7 @@ class EventBus:
 
     def _diff_steps(self, task_id: str) -> None:
         with self._tlock(task_id):           # 同一个任务的步骤按顺序比，免得两个线程交错发
-            new = to_steps(self.mgr.events(task_id))
+            new = self.mgr.steps(task_id)       # 带上子 Agent 的链接
             old = self._steps.get(task_id)
             if old is None:                  # 这次运行里第一次见到它：只发最后一个（之前的客户端用详情接口拿）
                 changed = new[-1:]

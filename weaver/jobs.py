@@ -48,6 +48,7 @@ class Job:
     kind: str = "shell"                      # shell：后台命令；agent：后台子 Agent
     report: str = ""                         # 后台子 Agent 的汇报
     waited: bool = False                     # 主 Agent 正在 job_wait 等它：结束时不另外通知
+    sub: str = ""                            # 后台子 Agent 的子账本（会话名），App 点进去看过程
     proc: object = field(default=None, repr=False, compare=False)
     thread: object = field(default=None, repr=False, compare=False)
     cancel_fn: object = field(default=None, repr=False, compare=False)
@@ -222,11 +223,11 @@ class Jobs:
     # ------------------------------------------------ 后台子 Agent
 
     def start_agent(self, title: str, run: Callable[[], tuple], cancel: Callable[[], None],
-                    progress: Callable[[], str], limit: int | None = None) -> str:
+                    progress: Callable[[], str], limit: int | None = None, sub: str = "") -> str:
         """在线程里跑一个子 Agent。run() 返回 (汇报, {is_error})。立刻返回任务 id。
         limit：同时最多几个后台子 Agent（数和登记在同一把锁里，几个同时派出也不会超）。"""
         job = Job(id="a" + uuid.uuid4().hex[:6], command=title, started=time.time(), kind="agent",
-                  cancel_fn=cancel, progress_fn=progress, done=threading.Event())
+                  cancel_fn=cancel, progress_fn=progress, done=threading.Event(), sub=sub)
 
         def go():
             try:

@@ -231,7 +231,7 @@ struct WindowBar: View {
 
     var body: some View {
         HStack {
-            Text("第 \(window.lowerBound + 1)–\(window.upperBound) \(unit) / 共 \(total) \(unit) · 编号随滚动重排")
+            Text("\(window.lowerBound + 1)–\(window.upperBound) / \(total)")
                 .font(KFont.sans(12))
                 .foregroundStyle(K.text4)
                 .lineLimit(1)
@@ -267,16 +267,16 @@ struct SmallButton: View {
     }
 }
 
-/// 返回按钮，样子和启动器的「+ 文件」一致。esc 一直标着；`showEsc` = 此刻按 Esc 是否就是点它，
-/// Esc 被别的东西占用（输入中、过程展开）时只是变淡，不消失，宽度也不跳。
+/// 返回按钮，样子和启动器的「+ 文件」一致：只有 ← 和 esc，不写回到哪（label 只用作悬停提示和辅助功能）。
+/// `showEsc` = 此刻按 Esc 是否就是点它，Esc 被别的东西占用（输入中、过程展开）时只是变淡，不消失，宽度也不跳。
 struct BackButton: View {
     let label: String
     var showEsc = true
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Text("← \(label)")
+            HStack(spacing: 6) {
+                Text("←")
                 Kbd("esc").opacity(showEsc ? 1 : 0.4)
             }
             .font(KFont.sans(12))
@@ -292,6 +292,8 @@ struct BackButton: View {
         }
         .buttonStyle(PressableStyle())
         .fixedSize()
+        .help(label)
+        .accessibilityLabel(label)
     }
 }
 

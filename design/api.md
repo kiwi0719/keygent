@@ -211,6 +211,18 @@
 
 ---
 
+
+**MCP 服务器问你**（v1.9，`kind: "elicit"`）：工具调用中途服务器要信息（design/mcp2.md 第二节）。
+```json
+{"id": "…", "kind": "elicit", "title": "github 问你：部署到哪个环境？", "body": "github 在要信息；不要在这里填密码",
+ "choices": ["accept", "decline", "cancel"], "server": "github", "mode": "form", "url": "",
+ "fields": [{"name": "env", "title": "Env", "description": "", "type": "enum", "required": true,
+             "options": ["staging", "prod"], "default": null}]}
+```
+`type` 是 `string` / `number` / `integer` / `boolean` / `enum`；`mode: "url"` 时没有字段，`url` 是要你打开的网址。回答：`POST /v1/waits/{id}` `{"decision": "accept", "values": {"env": "staging"}}`（按类型和必填项校验，不对回 400）/ `decline` / `cancel`。填的值只交给服务器，不进模型的上下文。等你回答时调用不计超时；任务被取消时这件作废。
+
+**MCP 服务器借用模型**（v1.9）：普通审批，`call.name` 是 `"sampling"`、`call.args` 是 `{"server"}`，标题“X 想借用模型”，`body` 是它要发给模型的内容（前 500 字）。`always` = 以后这个任务里不再问这个服务器。不要放进“全部放行”。
+
 ## 2. 接口
 
 ### 2.1 胶囊：`GET /v1/status`
@@ -430,6 +442,47 @@ GET /v1/settings/mcp
 
 400：没有开头那段、名字不合法（小写字母数字和 -，最长 64）、description 空、改 Claude Code 的 skill；409：重名。
 
+### 2.13 改了哪些文件、diff、撤销（v1.9）
+
+任务详情多两个字段：
+
+- `todos`：当前 todo 清单 `[{"content", "status": "pending"|"in_progress"|"completed"|"cancelled"}]`（没有就是空数组）。
+- `changes`：这个任务（含它的子 Agent）改过的文件，按第一次改的先后：
+  `[{"path": "/abs/tests/conftest.py", "rel": "tests/conftest.py", "added": 9, "removed": 1, "created": false, "undone": false, "can_undo": true, "why": ""}]`。
+  `can_undo: false` 时 `why` 写原因（“之后又被改过”“文件被删了”）。
+
+步骤（1.3）多三个可选字段：`diff`（`edit_file` / `write_file` 那一步，从参数算的统一 diff，最多 200 行）、`sub`（`task` 那一步：子账本的会话名）、`images`（工具返回的图片 `[{"id", "mime"}]`，用 2.18 取）。审批（1.4）里改文件的多一个 `diff`（按磁盘现状和参数算）。`jobs` 项多一个 `sub`（后台子 Agent 的子账本）。
+
+- `GET /v1/tasks/{id}/changes?path=<路径>` → `{"path", "rel", "diff"}`：这个文件从任务第一次改之前到最后一次改之后的统一 diff（上下文 3 行，最多 400 行）。没改过这个文件 → 404。
+- `POST /v1/tasks/{id}/undo` `{"path"}` → `{"changes": [...]}`：把这个文件恢复到任务改它之前（倒着一次次撤销）。之后又被别人改过 → 409，文件不动。撤销后账本里记一条背景输入（不开启新的一轮），模型下一轮知道；步骤里多一条 note“你撤销了 X 的改动”。
+
+### 2.14 子 Agent 的过程（v1.9）
+
+`GET /v1/tasks/{id}/agents/{sub}` → `{"sub", "title", "status", "steps": [Step], "final", "usage": {"tokens", "steps"}}`。`sub` 来自步骤或 `jobs` 的 `sub`、搜索结果的 `sub`。归档的任务加 `?archived=1`。子账本的事件不单独推，在跑时客户端自己隔几秒拉一次。
+
+### 2.15 归档的任务（v1.9）
+
+- `GET /v1/tasks?archived=1` → `{"tasks": [TaskSummary + "archived": true, "archived_at"]}`，最近归档的在前。
+- `GET /v1/tasks/{id}?archived=1` → 只读详情（同 2.4，`waiting` 为空）。`GET /v1/tasks/{id}/changes?…&archived=1` 同理。
+- `POST /v1/tasks/{id}/restore` → TaskSummary：搬回来，之后就是普通任务。没有这个归档 → 404。
+
+### 2.16 设置 › 权限、记忆（v1.9）
+
+- `GET /v1/settings/permissions` → `{"rules": [{"task", "task_title", "key", "kind": "bash"|"mcp", "ts"}], "projects": [{"root", "what": ["skill", "子 Agent 类型", "MCP 服务器"], "state": "trusted"|"denied"}], "builtin": ["…"]}`。借用模型的“总是允许”的 key 是 `sampling:<服务器>`。
+- `DELETE /v1/settings/permissions/rules` `{"task", "key"}` → 204：撤销一条“总是允许”（之后同样的操作重新问；再点一次“总是允许”就又生效）。
+- `DELETE /v1/settings/permissions/projects` `{"root"}` → 204：不再信任（或不再拒绝）这个项目，下一轮开始时重新问。
+- `GET /v1/settings/memory` → `{"scopes": [{"scope": "user"|"project", "root", "label", "items": [{"name", "type", "description", "path"}]}], "template"}`。
+- `GET|PUT|DELETE /v1/settings/memory/{name}?scope=user|project&root=<项目>`：读（`{"name", "text"}`，整个文件）、保存（`{"text"}`，frontmatter 里 name 改了就是改名）、删除（归档）。`POST /v1/settings/memory` `{"scope", "root", "text"}` 新建。像密钥、像注入指令的内容 → 400。
+
+### 2.17 MCP 提示词（v1.9，design/mcp2.md 第四节）
+
+- `GET /v1/prompts?workdir=<目录>` → `{"prompts": [{"server", "name", "title", "description", "arguments": [{"name", "description", "required"}]}]}`：用户级 + 这个项目已信任的服务器。
+- `POST /v1/tasks` 可以用 `{"prompt": {"server", "name", "arguments": {…}}, "workdir"}` 代替 `text`：weaverd 拿到 prompt 的消息作为第一句话，标题是 `/<server>:<name>`。
+
+### 2.18 取图片：`GET /v1/blobs/{sha256}?mime=image/png`（v1.9）
+
+返回原始字节（步骤 `images` 里的 `id`）。
+
 ## 3. 事件流：`GET /v1/events?after=<cursor>`
 
 标准 SSE（`text/event-stream`）。一条连接收所有任务的事件。
@@ -581,6 +634,8 @@ decoder.keyDecodingStrategy = .convertFromSnakeCase
 ---
 
 ## 变更记录
+
+- 2026-10-03 v1.9：任务详情多 `todos`、`changes`；步骤多 `diff`、`sub`、`images`；审批多 `diff`；`jobs` 多 `sub`（2.13）。新接口：改动的 diff 和撤销（2.13）、子 Agent 的过程（2.14）、归档列表 / 只读详情 / 恢复（2.15）、设置 › 权限和记忆（2.16）、MCP 提示词和用 prompt 新建任务（2.17）、取图片（2.18）。新的等待类型 `elicit`，借用模型是 `call.name: "sampling"` 的审批（1.4 末尾）。`GET /v1/status` 的 `first_wait.kind` 可能是 `elicit`（胶囊按“问你”提醒）。一轮结束时，这一轮里没回答的等待（外部输入的确认除外）一律作废。
 
 - 2026-10-02 v1.8：MCP 登录——`POST /v1/settings/mcp/{name}/login`；列表状态多 `needs_login`、`logging_in`（带 `login`）；常用服务器 GitHub 改成登录（2.12）。
 - 2026-10-02 v1.7：设置页接口 `/v1/settings/…`（2.12）：模型（含高级项）、用户级 MCP 服务器（列表带连接状态、粘贴解析、常用服务器、从 Claude 导入）、用户级 skills（新建 / 编辑 / 改名 / 归档）。

@@ -104,6 +104,56 @@ struct SkillDetail: Decodable {
     var files: [String]
 }
 
+/// 设置 › 权限（GET /v1/settings/permissions，api.md v1.9）
+struct PermissionList: Decodable, Equatable {
+    struct Rule: Decodable, Equatable, Identifiable {
+        var task: String
+        var taskTitle: String
+        var key: String
+        var kind: String        // bash / mcp
+        var ts: Double
+        var id: String { task + "\u{1}" + key }
+
+        enum CodingKeys: String, CodingKey { case task, taskTitle = "task_title", key, kind, ts }
+    }
+
+    struct Project: Decodable, Equatable, Identifiable {
+        var root: String
+        var what: [String]
+        var state: String       // trusted / denied
+        var id: String { root }
+    }
+
+    var rules: [Rule]
+    var projects: [Project]
+    var builtin: [String]
+}
+
+/// 设置 › 记忆（GET /v1/settings/memory）
+struct MemoryList: Decodable, Equatable {
+    struct Item: Decodable, Equatable {
+        var name: String
+        var type: String
+        var description: String
+        var path: String
+    }
+
+    struct Scope: Decodable, Equatable {
+        var scope: String       // user / project
+        var root: String
+        var label: String
+        var items: [Item]
+    }
+
+    var scopes: [Scope]
+    var template: String
+}
+
+struct MemoryDetail: Decodable {
+    var name: String
+    var text: String
+}
+
 extension JSONValue {
     /// 转成 JSONSerialization 能编码的对象（原样发回去）
     var foundation: Any {

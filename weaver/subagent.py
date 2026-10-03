@@ -136,10 +136,11 @@ class SubAgents:
                  max_steps: int = 30, token_budget: int = 200_000, context_window: int = 128_000,
                  max_output: int = 8192, compact_at: int | None = None, max_parallel: int = 4, skills=None,
                  mcp=None, approver_info: bool = False, agent_types=None, model_for: Callable | None = None,
-                 jobs=None, fork_source: dict | None = None):
+                 jobs=None, fork_source: dict | None = None, undo_session: str | None = None):
         """approver_info=True：approver(wait, info) 多收一个 info（哪个子 Agent、父任务里哪次 task 调用），
         并且不排队——常驻服务把审批升到父任务的“等你的事”，几个子 Agent 可以同时在等。"""
         self.session, self.store, self.model = session, store, model
+        self.undo_session = undo_session or session          # 子 Agent 改文件记在主任务的撤销日志里
         self.root, self.sandbox, self.blobs, self.yes = root, sandbox, blobs, yes
         self.display = display or (lambda desc, ev: None)
         self.limits = dict(max_steps=max_steps, token_budget=token_budget, context_window=context_window,
@@ -173,7 +174,7 @@ class SubAgents:
     # ------------------------------------------------ 组装子 Agent
 
     def toolbox(self, mode: str) -> ToolBox:
-        box = ToolBox(self.root).add_write_tools(self.session, self.blobs, self.sandbox)   # 撤销记在父会话里
+        box = ToolBox(self.root).add_write_tools(self.undo_session, self.blobs, self.sandbox)   # 撤销记在父会话里
         if mode == "explore":
             for name in ("write_file", "edit_file"):
                 box.tools.pop(name)
@@ -225,7 +226,7 @@ class SubAgents:
             return self.jobs.start_agent(
                 description, lambda: self._drive(child, prompt, gate_info, label),
                 cancel=lambda: child.cancel("后台子 Agent 被结束"), progress=lambda: _progress(child),
-                limit=MAX_BACKGROUND)
+                limit=MAX_BACKGROUND, sub=child.session_id)
         return self._drive(child, prompt, gate_info, label)
 
     def _child(self, description: str, mode: str, atype, context: str, call_id):

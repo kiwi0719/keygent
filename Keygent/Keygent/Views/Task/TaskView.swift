@@ -19,7 +19,7 @@ struct TaskView: View {
             // 顶栏
             HStack(spacing: 12) {
                 // 输入中 Esc = 离开输入框，过程展开时 Esc = 收起过程，这两种情况返回按钮不标 esc
-                BackButton(label: "启动器", showEsc: !inInput && !T.proc) {
+                BackButton(label: "回到启动器", showEsc: !inInput && !T.proc) {
                     store.backToLauncherFromTask()
                 }
                 Text(T.summary?.title ?? "")
@@ -63,9 +63,19 @@ struct TaskView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     VStack(spacing: 14) {
+                        if T.archived {
+                            ArchivedBanner()
+                        }
+                        // 清单：它列了步骤就一直看得见（视频里胶囊下那张小卡的同一份）
+                        if !store.taskTodos.isEmpty {
+                            TodoCard(todos: store.taskTodos, settled: !kind.isActive)
+                        }
                         // 这一轮还在跑 / 停在等你：看它正在做的事；跑完了：看结论
                         if kind == .run || kind == .wait {
                             LiveRound()
+                            if !store.taskChanges.isEmpty {
+                                ChangesList(changes: store.taskChanges, inCard: false)
+                            }
                         } else {
                             ResultCard()
                         }
@@ -82,6 +92,9 @@ struct TaskView: View {
                                          onSkip: { store.questionSkip(w) },
                                          onLater: { store.questionLater(w) },
                                          onMore: { store.openQueue() })
+                        }
+                        if let w = store.taskElicit {
+                            ElicitCard(wait: w, busy: T.answering == w.id, focused: $focused)
                         }
                         if let w = store.taskGate {
                             GateCard(wait: w, more: store.taskWaits.count - (store.taskQuestion == nil ? 1 : 2),
@@ -153,6 +166,16 @@ struct TaskView: View {
             .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 0) {
+                if T.archived {
+                    FooterBar {
+                        EmptyView()
+                    } trailing: {
+                        HStack(spacing: 14) {
+                            if !store.taskChanges.isEmpty { HStack(spacing: 5) { Kbd("⌘D"); Text("看改动") } }
+                            HStack(spacing: 5) { Kbd("⌘R"); Text("恢复") }
+                        }
+                    }
+                } else {
                 HStack(spacing: 10) {
                     if store.answerMode {
                         Text("回答")
@@ -181,9 +204,11 @@ struct TaskView: View {
                 .overlay(alignment: .top) { if store.taskTalk.isEmpty || overflows { HLine() } }
 
                 FooterBar {
-                    Text((overflows ? "↑↓ 滚动 · " : "") + "⌘C 复制结论 · 直接拖到任意应用")
+                    Text((T.proc ? "↑↓ 选步骤 · " : overflows ? "↑↓ 滚动 · " : "") + (store.taskChanges.isEmpty ? "⌘C 复制结论 · 直接拖到任意应用"
+                                                          : "⌘C 复制结论 · ⌘D 看改动 · ⌘Z 撤销"))
                 } trailing: {
                     EnterHint(label: T.hintFor != nil || store.answerMode ? "发给它" : "接着做")
+                }
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomH = $0 }
@@ -202,7 +227,31 @@ struct TaskView: View {
         if let w = store.task.hintFor {
             return w.kind == "stuck" ? "给它一个提示，比如：试试换个网址" : "告诉它为什么不行"
         }
-        return store.taskKind.isActive ? "tab 进入 · 插一句话，它在下一步之前会看到" : "tab 进入 · 接着说，开启新的一轮"
+        return store.taskKind.isActive ? "插一句话" : "接着说"
+    }
+}
+
+/// 归档的任务：顶上一条灰色横条
+private struct ArchivedBanner: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "archivebox").font(.system(size: 12)).foregroundStyle(K.text3)
+            Text("已归档" + (store.task.summary?.archivedAt.map { " · " + TimeText.relative($0) } ?? ""))
+                .font(KFont.sans(13, .medium))
+            Spacer()
+            Button { if let id = store.task.id { store.restoreTask(id) } } label: {
+                HStack(spacing: 6) { Text("恢复"); Kbd("⌘R") }
+                    .font(KFont.sans(12))
+                    .foregroundStyle(K.ink)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(K.line3))
     }
 }
 
@@ -224,7 +273,7 @@ private struct ResultCard: View {
                 Text("结果")
                 Spacer()
                 if let u = T.detail?.usage, u.steps > 0 || u.tokens > 0 {
-                    Text("\(u.steps) 步 · \(formatTokens(u.tokens)) tokens"
+                    Text("\(formatTokens(u.tokens)) tokens"
                          + ((u.extractTokens ?? 0) > 0 ? " · 记忆 \(formatTokens(u.extractTokens!))" : ""))
                         .font(KFont.mono(11))
                         .help((u.extractTokens ?? 0) > 0 ? "任务结束后自动提取记忆用掉的 token（不算在这一轮的预算里）" : "")
@@ -243,7 +292,7 @@ private struct ResultCard: View {
                     let cap: CGFloat = T.proc ? 120 : 280
                     let folds = fullH > cap + 40
                     let folded = folds && !T.resultOpen
-                    MarkdownView(text: final)
+                    MarkdownView(text: final, baseDir: T.summary?.workdir)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                         .fixedSize(horizontal: false, vertical: true)
@@ -281,6 +330,9 @@ private struct ResultCard: View {
                 } else {
                     PendingRow(text: pendingText, kind: kind, writing: !T.delta.isEmpty, since: store.taskRoundStart)
                 }
+            }
+            if !store.taskChanges.isEmpty {
+                ChangesList(changes: store.taskChanges)
             }
         }
         .background(RoundedRectangle(cornerRadius: 10).fill(.white))
@@ -527,6 +579,7 @@ private struct ThinkingLine: View {
 // MARK: - 后台（后台命令 / 后台子 Agent）
 
 private struct JobsStrip: View {
+    @Environment(AppStore.self) private var store
     let jobs: [JobInfo]
 
     var body: some View {
@@ -537,6 +590,7 @@ private struct JobsStrip: View {
                 .font(KFont.sans(12))
                 .foregroundStyle(K.text3)
             ForEach(shown) { j in
+                Button { if let s = j.sub, !s.isEmpty { store.openAgent(s) } } label: {
                 HStack(spacing: 8) {
                     if j.status == "running" { ProgressView().controlSize(.mini) } else {
                         Dot(color: j.status == "done" ? K.green : j.status == "failed" ? K.red : K.dash, size: 7)
@@ -552,7 +606,14 @@ private struct JobsStrip: View {
                     Text(Self.statusText(j.status))
                         .font(KFont.sans(11))
                         .foregroundStyle(K.text4)
+                    if let s = j.sub, !s.isEmpty {
+                        Text("看过程 →").font(KFont.sans(11)).foregroundStyle(K.text3)
+                    }
                 }
+                .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .disabled((j.sub ?? "").isEmpty)
             }
         }
         .padding(.horizontal, 14)
@@ -589,9 +650,11 @@ struct QuestionCard: View {
                         .font(KFont.sans(15, .bold))
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(wait.sub)
-                        .font(KFont.sans(12))
-                        .foregroundStyle(K.text3)
+                    if !wait.sub.isEmpty {
+                        Text(wait.sub)
+                            .font(KFont.sans(12))
+                            .foregroundStyle(K.text3)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if busy { ProgressView().controlSize(.small) }
@@ -669,23 +732,28 @@ struct GateCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(wait.title)
+                    Text(wait.shownTitle)
                         .font(KFont.sans(14, .bold))
-                        .lineLimit(2)
-                    if !wait.body.isEmpty {
-                        Text(wait.body)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if !wait.shownBody.isEmpty {
+                        Text(wait.shownBody)
                             .font(KFont.sans(13))
                             .lineSpacing(3)
                     }
-                    Text(wait.sub)
-                        .font(KFont.sans(12))
-                        .foregroundStyle(K.text3)
+                    if !wait.sub.isEmpty {
+                        Text(wait.sub)
+                            .font(KFont.sans(12))
+                            .foregroundStyle(K.text3)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if busy { ProgressView().controlSize(.small) }
             }
 
-            if let cmd = wait.callPreview, !wait.title.contains(cmd) {
+            if let diff = wait.diff, !diff.isEmpty {
+                DiffCard(title: "", diff: diff, maxHeight: 200)
+            } else if let cmd = wait.callPreview, !wait.title.contains(cmd) {
                 Text(cmd)
                     .font(KFont.mono(12))
                     .lineLimit(4)
@@ -741,9 +809,6 @@ private struct ErrorCard: View {
                 (Text("出错了").fontWeight(.bold) + Text("：" + note))
                     .font(KFont.sans(14))
                     .lineSpacing(4)
-                Text("可以在下面接着说，让它换个办法。")
-                    .font(KFont.sans(12))
-                    .foregroundStyle(K.text3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             OutlineButton(title: "接着说 tab", action: onReply)
@@ -775,7 +840,7 @@ private struct ProcessPanel: View {
                         .padding(16)
                 }
                 if steps.count > ListWindow.size {
-                    Text("第 \(win.lowerBound + 1)–\(win.upperBound) 步 / 共 \(steps.count) 步 · 编号随滚动重排")
+                    Text("\(win.lowerBound + 1)–\(win.upperBound) / \(steps.count)")
                         .font(KFont.sans(11))
                         .foregroundStyle(K.text4)
                         .padding(.horizontal, 8)
@@ -787,7 +852,7 @@ private struct ProcessPanel: View {
                     Button { store.task.step = i } label: {
                         HStack(spacing: 10) {
                             StepDot(step: p)
-                            Text(p.title)
+                            Text(p.listTitle)
                                 .font(KFont.sans(p.status == "note" ? 12 : 13))
                                 .foregroundStyle(p.kind == .step && p.status != "note" ? K.ink : K.text2)
                                 .strikethrough(p.status == "denied", color: K.text4)
@@ -845,6 +910,7 @@ struct StepDot: View {
 
 /// 一步的详情：你说 / Agent 说 / 工具调用（用了 · 参数 · 得到 · 为什么）
 struct StepDetail: View {
+    @Environment(AppStore.self) private var store
     let step: Step
     var large = false
 
@@ -854,7 +920,9 @@ struct StepDetail: View {
                 if step.kind != .step {
                     SmallCaps(step.kind == .you ? "你说" : "Agent 说")
                     if large {
-                        MarkdownView(text: step.text, size: 15)
+                        MarkdownView(text: step.text, size: 15, baseDir: store.task.summary?.workdir)
+                    } else if step.kind == .agent {
+                        MarkdownView(text: step.text, baseDir: store.task.summary?.workdir)
                     } else {
                         Bubble(text: step.text, kind: step.bubbleKind)
                     }
@@ -879,7 +947,29 @@ struct StepDetail: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(RoundedRectangle(cornerRadius: 6).fill(K.line3))
                     }
-                    if !step.text.isEmpty {
+                    if let sub = step.sub, !sub.isEmpty {
+                        Button { store.openAgent(sub) } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "person.2")
+                                Text("看它的过程")
+                                Spacer()
+                                Kbd("↵")
+                            }
+                            .font(KFont.sans(13, .medium))
+                            .foregroundStyle(K.ink)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(K.line3))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressableStyle())
+                    }
+                    if let diff = step.diff, !diff.isEmpty {
+                        SmallCaps("改动")
+                        DiffView(diff, maxLines: large ? nil : 60, size: large ? 13 : 11.5)
+                            .background(RoundedRectangle(cornerRadius: 6).strokeBorder(K.line2))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    } else if !step.text.isEmpty {
                         SmallCaps(step.tool.isEmpty ? "内容" : "参数")
                         Text(step.prettyArgs)
                             .font(KFont.mono(12))
@@ -893,6 +983,23 @@ struct StepDetail: View {
                             .font(step.tool.isEmpty ? KFont.sans(13) : KFont.mono(12))
                             .foregroundStyle(K.text2)
                             .textSelection(.enabled)
+                    }
+                    if let imgs = step.images, !imgs.isEmpty {
+                        HStack(alignment: .top, spacing: 8) {
+                            ForEach(imgs, id: \.self) { BlobThumb(image: $0) }
+                        }
+                    }
+                    if step.isMemoryNote {
+                        Button { store.openSettings(tab: .memory) } label: {
+                            HStack(spacing: 8) {
+                                Kbd("⌘M")
+                                Text("去记忆页看、改、删")
+                            }
+                            .font(KFont.sans(12))
+                            .foregroundStyle(K.text2)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressableStyle())
                     }
                     if !step.why.isEmpty {
                         Text("为什么这么做：\(step.why)")

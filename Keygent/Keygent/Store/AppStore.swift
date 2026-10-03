@@ -4,6 +4,8 @@ import AppKit
 
 enum InputField: Hashable {
     case launcher, task, queueEdit, detail, editor
+    /// MCP 服务器提问的第几个字段；启动器里 prompt 的第几个参数
+    case elicit(Int), promptArg(Int)
     /// 设置页（AppStore+Settings）：模型页第几行、多行编辑器、MCP 服务器名字、常用服务器筛选、要填的第几项
     case settingsRow(Int), settingsEditor, settingsName, settingsFilter, settingsNeed(Int)
 }
@@ -48,7 +50,6 @@ struct LauncherState {
 
     var query = ""
     var pick: Int? = nil
-    var shown = 3
     var top = 0
     /// ⌘O 添加文件：面板开着没有、高亮第几个、窗口从第几个开始
     var picker = false
@@ -67,6 +68,21 @@ struct LauncherState {
     var resultTop = 0
     var searching = false
     var searchedFor = ""
+    /// ⌘⇧A 已归档：列表、选中第几条、窗口顶、正在读
+    var archivedMode = false
+    var archived: [TaskSummary] = []
+    var archPick = 0
+    var archTop = 0
+    var archLoading = false
+    /// 输入以 / 开头：MCP prompts（按工作区拉一次）、选中第几条、窗口顶；选了带参数的 → 参数表单
+    var prompts: [PromptItem] = []
+    var promptsFor: String? = nil
+    var promptsLoading = false
+    var promptPick = 0
+    var promptTop = 0
+    var promptArgs: PromptItem? = nil
+    var argValues: [String] = []
+    var argCur = 0
 }
 
 struct TaskState {
@@ -94,6 +110,44 @@ struct TaskState {
     var resultOpen = false
     /// 问题卡里 ↑↓ 高亮的选项（下标）
     var optionPick: Int? = nil
+    /// 归档的任务：只读，⌘R 恢复
+    var archived = false
+    /// 改过的文件里选中第几个（⌘D 看 diff、⌘Z 撤销它）
+    var changePick = 0
+    /// 结果卡底部改过的文件太多时折起来，展开了没有
+    var changesOpen = false
+    /// MCP 服务器问你：在填哪一件（等待 id）、填了什么、光标在第几个字段
+    var elicitFor: String? = nil
+    var elicitValues: [String: JSONValue] = [:]
+    var elicitCur = 0
+}
+
+struct PeekState {
+    var task: String? = nil
+    var todos: [TodoItem] = []
+    var steps: [Step] = []
+}
+
+/// ⌘D：一个任务改过的文件的 diff，↑↓ 换文件
+struct DiffSheetState {
+    var task: String
+    var archived: Bool
+    var files: [FileChange]
+    var cur: Int
+    var diffs: [String: FileDiff] = [:]
+    var error: String? = nil
+}
+
+/// 子 Agent 的过程（从过程面板「看它的过程」、后台条、搜索结果进来）
+struct AgentViewState {
+    var task: String
+    var sub: String
+    var archived: Bool
+    var detail: AgentDetail? = nil
+    var step: Int? = nil
+    var top: Int? = nil
+    var focusSeq: Int? = nil
+    var error: String? = nil
 }
 
 struct QueueState {
@@ -159,6 +213,12 @@ final class AppStore {
     var queue = QueueState()
     var detail = DetailState()
     var editor: ArgsEditorState? = nil
+    var diffSheet: DiffSheetState? = nil
+    /// 胶囊下那张小卡的内容（PeekController）
+    var peek = PeekState()
+    var agentView: AgentViewState? = nil
+    /// 等第二次确认的操作（任务页）：“undo:路径”
+    var armed: String? = nil
     /// 设置页（AppStore+Settings）；面板收起时不清，切出去复制 key 再回来还在
     var settings: SettingsState? = nil
     /// 设置页上次停在哪个分页
@@ -191,12 +251,13 @@ final class AppStore {
     /// 你按 esc 收起过的问题：不再自动弹
     @ObservationIgnored var dismissedQuestions: Set<String> = []
     @ObservationIgnored var bannerWork: DispatchWorkItem?
-    /// 横幅说的是哪个问题：点横幅 / ⌘⇧空格 直接去它
+    /// 横幅说的是哪个问题：点横幅直接去它
     @ObservationIgnored var bannerFor: WaitItem? = nil
     @ObservationIgnored var openFinder: () -> Void = {}
     @ObservationIgnored var openFolder: () -> Void = {}
     @ObservationIgnored var resignInput: () -> Void = {}
-    @ObservationIgnored var notify: (_ title: String, _ body: String) -> Void = { _, _ in }
+    /// 面板收着时来了新的等待（AppDelegate 接到胶囊下的小卡上）。系统通知只由 weaverd 在 App 没开时发
+    @ObservationIgnored var onWaitWhileHidden: () -> Void = {}
     /// 任务页中间那块滚动区按键滚动（↑↓），由视图里的 ScrollNudger 注册
     @ObservationIgnored var taskScrollBy: (CGFloat) -> Void = { _ in }
 
@@ -204,6 +265,7 @@ final class AppStore {
     @ObservationIgnored private var statusWork: DispatchWorkItem?
     @ObservationIgnored private var detailWork: DispatchWorkItem?
     @ObservationIgnored private var offlineTimer: Timer?
+    @ObservationIgnored var agentTimer: Timer?
 
     var capsule: CapsuleState { connection == .offline ? .offline : CapsuleState(status) }
 
@@ -311,7 +373,7 @@ final class AppStore {
             if w.isQuestion {
                 questionArrived(w)                 // 弹出问题卡，不再另发系统通知
             } else if !panelVisible {
-                notify("\(w.taskTitle) · 等你", w.title)
+                onWaitWhileHidden()                // 面板收着：胶囊下的小卡说一声（面板开着时顶上的横幅说）
             }
             refreshStatusSoon()
 
@@ -334,6 +396,10 @@ final class AppStore {
                 task.detail!.steps.append(step)
             }
             if step.kind == .agent { task.delta = "" }
+            // 清单变了、改了文件：拉一次详情拿 todos / changes（事件里不带）
+            if ["todo_write", "edit_file", "write_file", "task", "undo"].contains(step.tool), step.status != "running" {
+                reloadTaskSoon()
+            }
 
         case .delta(let tid, let text):
             guard tid == task.id else { return }
@@ -392,6 +458,8 @@ final class AppStore {
             case .model: requestFocus(.settingsRow(st.row))
             case .mcp: requestFocus(mcpFocus)
             case .skills: requestFocus(st.skills.editing != nil ? .settingsEditor : nil)
+            case .permissions: requestFocus(nil)
+            case .memory: requestFocus(st.memory.editing != nil ? .settingsEditor : nil)
             }
         } else if route == .launcher {
             requestFocus(.launcher)
@@ -408,12 +476,15 @@ final class AppStore {
         launcher.picker = false
         launcher.wsPicker = false
         editor = nil
+        armed = nil
     }
 
     func handleKey(_ e: KeyEvent) -> Bool {
         if settings != nil { return settingsKey(e) }
         if e.cmd, e.isChar(",") { openSettings(); return true }
         if editor != nil { return editorKey(e) }
+        if diffSheet != nil { return diffKey(e) }
+        if agentView != nil { return agentKey(e) }
         switch route {
         case .launcher: return launcherKey(e)
         case .task: return taskKey(e)
@@ -424,7 +495,7 @@ final class AppStore {
 
     // MARK: 胶囊
 
-    /// 点胶囊 / ⌘⇧空格：直接打开胶囊里的那件事（多件等你 → ④，单个任务 → ③）。
+    /// 点胶囊：直接打开胶囊里的那件事（多件等你 → ④，单个任务 → ③）。
     func openCapsuleTarget() {
         switch capsule {
         case .waiting(let tid, _, let more, _):
@@ -454,7 +525,7 @@ final class AppStore {
     // MARK: 回答等待（③ ④ 共用）
 
     func answer(_ w: WaitItem, _ decision: String, note: String? = nil, args: [String: JSONValue]? = nil,
-                done: ((Bool) -> Void)? = nil) {
+                values: [String: JSONValue]? = nil, done: ((Bool) -> Void)? = nil) {
         task.answering = w.id
         queue.working = w.id
         Task { @MainActor in
@@ -463,7 +534,7 @@ final class AppStore {
                 if queue.working == w.id { queue.working = nil }
             }
             do {
-                let s = try await client.answer(w.id, decision: decision, note: note, args: args)
+                let s = try await client.answer(w.id, decision: decision, note: note, args: args, values: values)
                 waits.removeAll { $0.id == w.id }
                 if let i = tasks.firstIndex(where: { $0.id == s.id }) { tasks[i] = s }
                 if task.id == s.id { task.summary = s; reloadTaskSoon() }

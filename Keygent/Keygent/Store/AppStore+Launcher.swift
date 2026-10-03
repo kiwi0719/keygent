@@ -3,14 +3,10 @@ import AppKit
 // MARK: - ① 启动器
 
 extension AppStore {
-    var launcherFull: Bool { launcher.shown >= tasks.count }
-
+    /// 最近任务：一屏 5 条的窗口，↑↓ / 滚轮挪
     var launcherWindow: (top: Int, count: Int) {
-        if launcherFull {
-            let top = min(launcher.top, max(0, tasks.count - LauncherState.viewCount))
-            return (top, min(LauncherState.viewCount, tasks.count - top))
-        }
-        return (0, min(launcher.shown, tasks.count))
+        let top = min(launcher.top, max(0, tasks.count - LauncherState.viewCount))
+        return (top, min(LauncherState.viewCount, tasks.count - top))
     }
 
     var launcherRows: [(index: Int, slot: Int, task: TaskSummary)] {
@@ -32,11 +28,6 @@ extension AppStore {
         if launcher.pick == i { launcherSubmit() } else { launcher.pick = i }
     }
 
-    /// 一次全部展开（列表本来就是全量，不分页）
-    func launcherMore() {
-        launcher.shown = tasks.count
-    }
-
     func launcherScroll(_ d: Int) {
         launcher.top = max(0, min(tasks.count - LauncherState.viewCount, launcher.top + d))
     }
@@ -51,6 +42,13 @@ extension AppStore {
 
     /// 输入变了：搜索模式下停 0.3 秒再搜，免得每敲一个字发一次
     func launcherQueryChanged() {
+        if launcherSlashMode {
+            launcher.pick = nil
+            loadPrompts()
+            launcher.promptPick = 0
+            launcher.promptTop = 0
+            return
+        }
         guard launcherSearchMode else {
             if !launcher.results.isEmpty || launcher.searching { launcher.results = []; launcher.searching = false }
             launcher.resultPick = nil
@@ -64,7 +62,7 @@ extension AppStore {
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard launcherSearchMode, launcherSearchTerms == q else { return }
             do {
-                let hits = try await client.search(q)
+                let hits = try await client.search(q, archived: true)
                 guard launcherSearchTerms == q else { return }
                 launcher.results = hits
                 launcher.searchedFor = q
@@ -78,8 +76,17 @@ extension AppStore {
     }
 
     func openSearchHit(_ h: SearchHit) {
-        openTask(id: h.task)
-        if h.sub.isEmpty { task.focusSeq = h.seq }   // 命中在子 Agent 的账本里：只打开任务
+        if h.archived {
+            openArchivedTask(TaskSummary(id: h.task, title: h.taskTitle, status: "done", note: "", now: "",
+                                         created: h.ts, updated: h.ts, waiting: 0, workdir: h.workdir, archived: true))
+        } else {
+            openTask(id: h.task)
+        }
+        if h.sub.isEmpty {
+            task.focusSeq = h.seq
+        } else {                                      // 命中在子 Agent 的账本里：打开主任务，直接进这个子 Agent
+            openAgent(h.sub, focusSeq: h.seq)
+        }
     }
 
     var resultWindow: Range<Int> { ListWindow.range(top: launcher.resultTop, count: launcher.results.count) }
@@ -347,6 +354,10 @@ extension AppStore {
         }
         if launcher.wsPicker { return workspaceKey(e) }
         if launcher.picker { return fileKey(e) }
+        if launcher.archivedMode { return archivedKey(e) }
+        if launcher.promptArgs != nil { return promptArgsKey(e) }
+        if launcherSlashMode, !(e.cmd && (e.isChar("o") || e.isChar("e"))) { return slashKey(e) }
+        if e.cmd, e.shift, e.isChar("a") { openArchived(); return true }
 
         if e.cmd, e.shift, e.isChar("o") { openFinder(); return true }
         if e.cmd, e.isChar("o") { openFilePicker(); return true }
@@ -362,25 +373,9 @@ extension AppStore {
         if e.plain, e.key == .down || e.key == .up {
             guard !tasks.isEmpty else { return true }
             let down = e.key == .down
-            let full = launcherFull
-            let mx = full ? tasks.count : min(launcher.shown, tasks.count)
-            if down, !full, launcher.pick == mx - 1 {
-                launcherMore()
-            }
-            let limit = launcherFull ? tasks.count : mx
-            let p: Int
-            if let cur = launcher.pick {
-                p = max(0, min(limit - 1, cur + (down ? 1 : -1)))
-            } else {
-                p = w.top
-            }
-            var t = launcher.top
-            if launcherFull {
-                if p < t { t = p }
-                if p > t + LauncherState.viewCount - 1 { t = p - LauncherState.viewCount + 1 }
-            }
+            let p = launcher.pick.map { max(0, min(tasks.count - 1, $0 + (down ? 1 : -1))) } ?? w.top
             launcher.pick = p
-            launcher.top = t
+            launcher.top = ListWindow.fit(p, top: launcher.top, count: tasks.count)
             return true
         }
 
