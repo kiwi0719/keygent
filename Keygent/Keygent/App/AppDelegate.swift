@@ -9,10 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeys: [HotKey] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 只留一个 Keygent：新起的接管，旧的退出（不然两个面板、两个胶囊、⌘⇧空格 呼出的可能是另一个）
+        // 只留一个 Keygent：新起的接管，旧的退出（不然两个面板、两个胶囊、⌘⇧空格 呼出的可能是另一个）。
+        // 隔离的调试实例（KEYGENT_DEBUG_NAME）不注册热键，也就不能把正在用的那个退掉
+        let isDebugInstance = ProcessInfo.processInfo.environment["KEYGENT_DEBUG_NAME"] != nil
         let me = NSRunningApplication.current
         for old in NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-        where old.processIdentifier != me.processIdentifier {
+        where !isDebugInstance && old.processIdentifier != me.processIdentifier {
             old.terminate()
         }
 
@@ -41,8 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onWaitWhileHidden = { [weak self] in self?.peek.show(for: 8) }
 
         // 唯一的全局热键 ⌘⇧空格：开着就收起，收着就呼出启动器（等你的那件事排在 ⌘1）。
-        // 隔离的调试实例（KEYGENT_DEBUG_NAME）不抢全局快捷键
-        if ProcessInfo.processInfo.environment["KEYGENT_DEBUG_NAME"] == nil {
+        // 隔离的调试实例不抢全局快捷键
+        if !isDebugInstance {
             hotKeys.append(HotKey(keyCode: kVK_Space, modifiers: cmdKey | shiftKey) { [weak self] in
                 guard let self else { return }
                 if self.panel.isVisible {

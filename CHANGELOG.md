@@ -6,33 +6,22 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
-### Added
-- Keygent: changed files with +/- counts, ⌘D diffs and ⌘Z per-file undo; diffs in approvals and step details
-- Keygent: an always-visible todo card, and a peek card under the menu-bar capsule
-- Keygent: open a sub-agent's own process; ⌘⇧A archived tasks with ⌘R restore
-- Keygent: Settings › 权限 (revoke always-allow, forget trusted projects) and 记忆 (view, edit, delete memories)
-- Keygent: images in Markdown results and in tool results
-- MCP: server questions (elicitation), sampling with per-call approval, tool images, roots,
-  tool list changes, and prompts via `/` in the launcher
-- weaverd API v1.9 (see `design/api.md`)
-
-### Fixed
-- Sub-agent file edits are recorded under the parent task's undo log
-- Process panel: ↑↓ selects steps and the step list follows the selection
-
-## [0.1.0] - 2026-10-02
+## [0.1.0] - 2026-10-03
 
 First public release.
 
 ### Added
 
-- **Keygent** (macOS 14+, Apple silicon): menu-bar launcher (<kbd>⌥ Space</kbd>)
+- **Keygent** (macOS 14+, Apple silicon): menu-bar launcher (<kbd>⌘⇧ Space</kbd>)
   with working folder and attachments, status capsule, task window with live
   steps, a queue of everything waiting for you (approve / deny / edit and
   approve / answer), step timeline, and keyboard-only settings for model, MCP
   and skills. The app bundle embeds Python 3.14 and the MCP SDK and registers
   `weaverd` as a login item; it restarts the daemon when the bundled code
-  changes.
+  changes. Changed files with +/- counts, ⌘D diffs and ⌘Z per-file undo; an
+  always-visible todo card and a peek card under the capsule; a sub-agent's
+  own process; ⌘⇧A archived tasks; Settings › 权限 and 记忆; images in
+  Markdown and tool results.
 - **weaverd**: background service with one ledger and one worker per task,
   localhost HTTP + SSE API with a token ([design/api.md](design/api.md)),
   human-readable step translation, system notifications when the app is
@@ -57,7 +46,9 @@ First public release.
   loop and budget guards.
 - **Extensions**: MCP servers (stdio and HTTP, OAuth login, deferred tool lists,
   project-level trust) and skills, including ten built-in skills adapted from
-  obra/superpowers.
+  obra/superpowers. MCP server questions (elicitation), sampling with
+  per-call approval, tool images, roots, tool list changes, and prompts via
+  `/` in the launcher (weaverd API v1.9, see `design/api.md`).
 
 ### Fixed
 
@@ -65,6 +56,9 @@ First public release.
   (`BaseExceptionGroup` is built in only from 3.11).
 - `Keygent/scripts/fetch-python.sh` failed with "unbound variable" under a C
   locale once Python was already downloaded.
+- Sub-agent file edits are recorded under the parent task's undo log.
+- An isolated debug instance of Keygent (`KEYGENT_DEBUG_NAME`) no longer quits
+  the running Keygent, which left ⌘⇧ Space unanswered.
 
 [Unreleased]: https://github.com/kiwi0719/keygent/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/kiwi0719/keygent/releases/tag/v0.1.0

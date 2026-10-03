@@ -10,6 +10,10 @@
 
 **按一个键，把一件长活交给编码 Agent；它需要你的时候再回来。**
 
+<p align="center">
+  <img src="docs/images/launcher.png" width="760" alt="Keygent 启动器：一句话写任务，带上文件和工作文件夹，下面是最近的任务">
+</p>
+
 Keygent 是一个 macOS 菜单栏 App，后面是 **Weaver**：一个跑在本机后台（`weaverd`）的编码 Agent。按 <kbd>⌘ ⇧ 空格</kbd>，说要在哪个文件夹做什么，然后回去干你的事。Agent 在沙箱里读、改、跑；菜单栏上的胶囊告诉你它在跑、做完了，还是在等你。所有任务里要你放行、要你回答、出错的事，都汇到一个队列里，全键盘就能处理完。
 
 Weaver 的内核只守一条规则：**事件日志（账本）是唯一的事实，内核是账本上的纯函数。**其余一切（调模型、工具、常驻服务、App）都挂在外面，所以任务崩了能接着跑、能重放，每一处文件改动都能撤销。
@@ -18,9 +22,12 @@ Weaver 的内核只守一条规则：**事件日志（账本）是唯一的事�
 
 - [现状](#现状)
 - [一眼看懂](#一眼看懂)
+- [能做什么](#能做什么)
+- [快捷键](#快捷键)
 - [怎么工作的](#怎么工作的)
 - [安装](#安装)
 - [配置模型](#配置模型)
+- [常见问题](#常见问题)
 - [不用 App 直接跑 Weaver](#不用-app-直接跑-weaver)
 - [文档](#文档)
 - [参与贡献](#参与贡献)
@@ -37,14 +44,57 @@ Weaver 的内核只守一条规则：**事件日志（账本）是唯一的事�
 
 ## 一眼看懂
 
-| 按键 | 作用 |
-|---|---|
-| <kbd>⌘ ⇧ 空格</kbd> | 呼出 / 收起启动器（唯一的全局热键）：一句话、工作文件夹，可以带文件或剪贴板；等你的那件事排在 <kbd>⌘ 1</kbd> |
-| <kbd>⌘ ,</kbd> | 设置：模型 · MCP · Skills · 权限 · 记忆（<kbd>⌘ [</kbd> <kbd>⌘ ]</kbd> 切换），全键盘 |
-| <kbd>⌘ ⇧ O</kbd> | 从访达附加文件 |
-| 菜单栏胶囊 | 左键打开；右键有「等你的事」「重新连接」「退出」 |
+1. 在哪儿都行，按 <kbd>⌘ ⇧ 空格</kbd>，写一句要做什么（「修好时好时坏的登录测试」），<kbd>⌘ E</kbd> 选文件夹，<kbd>↵</kbd>。
+2. 回去干你的事。菜单栏上的胶囊显示任务在跑。
+3. Agent 要做沙箱外的事时，会停下来问你：<kbd>⌘ ↵</kbd> 放行，<kbd>⌫</kbd> 拒绝，或者先改一下命令再放行。
+4. 做完了看结果，<kbd>⌘ D</kbd> 看改了什么，不满意就 <kbd>⌘ Z</kbd> 把某个文件撤回去。
 
-任务需要你时，它会停下来等，不会瞎猜：**放行**、**不行**、**改一下参数再放行**、或者**回答问题**。可以在任务窗口里处理，也可以在汇总了所有任务的「等你的事」队列里逐件处理。App 没开时，用系统通知提醒。
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/approval.png" alt="在跑的任务停下来，等你放行一条 pip install 命令"></td>
+    <td width="50%"><img src="docs/images/result.png" alt="做完的任务：上面是结果，下面是每一步的时间线"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>拿不准就停下来等你，不瞎猜</sub></td>
+    <td align="center"><sub>先看结论，每一步都在下面</sub></td>
+  </tr>
+</table>
+
+App 没开时用系统通知提醒你，后台服务照样在干活。
+
+## 能做什么
+
+- **等你的事都在一个队列里。** 所有任务里要你放行、要你回答、出错的事汇在一处：放行、拒绝、改一下参数再放行、或者回答，不用到处找窗口。
+- **每一处改动都能撤销。** 任务页列出改过的文件和 +/- 行数；<kbd>⌘ D</kbd> 看 diff，<kbd>⌘ Z</kbd> 把文件恢复到这个任务改它之前。
+- **看得见它在干什么。** 实时步骤用人话写；Agent 自己维护的清单卡片；菜单栏胶囊下的小卡；<kbd>⌘ .</kbd> 看完整过程，子 Agent 的步骤也能点进去看。
+- **默认在沙箱里。** `bash` 只能写工作文件夹和临时目录，别的都要先问你。密钥在发给模型、写进日志之前就打码了。
+- **崩了也不丢。** 任务跑在 `weaverd` 里，这是登录时自动启动的后台服务。退出 App、重启电脑、或者它崩了，任务都会从账本接着跑。
+- **模型自己选。** 任何 OpenAI 兼容接口或 Anthropic API，包括本地的 Ollama、LM Studio、vLLM。
+- **能扩展。** MCP 服务器（stdio 和 HTTP、OAuth、服务器提问和逐次批准的 sampling、启动器里 `/` 用提示词）、skills，还有能在设置里查看和编辑的记忆。
+
+## 快捷键
+
+Keygent 设计成不用鼠标。只有全局热键在 App 外也能用，其余的在面板开着时生效。
+
+| 在哪 | 按键 | 作用 |
+|---|---|---|
+| 任何地方 | <kbd>⌘ ⇧ 空格</kbd> | 呼出 / 收起启动器 |
+| 启动器 | <kbd>↵</kbd> | 开始任务 |
+| | <kbd>⌘ E</kbd> · <kbd>⌘ O</kbd> · <kbd>⌘ ⇧ O</kbd> | 工作文件夹 · 加最近用过的文件 · 从访达选文件 |
+| | <kbd>⌘ 1</kbd>–<kbd>⌘ 9</kbd>、<kbd>↑</kbd> <kbd>↓</kbd> | 选最近的任务，<kbd>↵</kbd> 打开；等你的那件事排在 <kbd>⌘ 1</kbd> |
+| | `?` 开头 | 搜以前的任务，含归档的 |
+| | `/` 开头 | 用 MCP 服务器的提示词 |
+| | <kbd>⌘ ⇧ A</kbd> | 已归档的任务（<kbd>⌘ R</kbd> 恢复） |
+| 任务 | <kbd>⌘ ↵</kbd> · <kbd>⌫</kbd> | 放行 · 拒绝 |
+| | <kbd>⌘ ⌫</kbd> | 停下任务 |
+| | <kbd>⌘ .</kbd> | 看完整过程；<kbd>↑</kbd> <kbd>↓</kbd> 选步骤，<kbd>↵</kbd> 进子 Agent |
+| | <kbd>⌘ D</kbd> · <kbd>⌘ Z</kbd> | 看改动 · 撤销一个文件（按两次） |
+| | <kbd>⌘ C</kbd> | 复制结论 |
+| | <kbd>⌘ ⇧ ↵</kbd> | 全屏详情 |
+| 哪儿都行 | <kbd>⌘ ,</kbd> | 设置：模型 · MCP · Skills · 权限 · 记忆（<kbd>⌘ [</kbd> <kbd>⌘ ]</kbd> 切换） |
+| | <kbd>esc</kbd> | 返回，或收起面板 |
+
+菜单栏胶囊：左键打开它显示的那件事，右键有「等你的事」「重新连接」「退出」。
 
 ## 怎么工作的
 
@@ -74,15 +124,35 @@ flowchart LR
 
 ### 下载
 
-从 [Releases](https://github.com/kiwi0719/keygent/releases) 下载 `Keygent-<版本>-arm64.zip`，解压，把 `Keygent.app` 拖进「应用程序」。
+需要 macOS 14 或更新，Apple 芯片（M1 及以后）。
 
-发布包是本地签名（ad-hoc），没有经过苹果公证，下载后会被隔离。清一次就好：
+1. 从[最新 Release](https://github.com/kiwi0719/keygent/releases/latest) 下载 `Keygent-<版本>-arm64.zip`。想核对的话，用旁边的 `.sha256` 文件校验：
+
+   ```bash
+   shasum -a 256 -c Keygent-0.1.0-arm64.zip.sha256
+   ```
+
+2. 解压，把 `Keygent.app` 拖进「应用程序」。
+3. 清一次隔离标记。发布包是本地签名（ad-hoc），没有经过苹果公证，不清的话 macOS 会说 App「已损坏，无法打开」或「无法验证开发者」：
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Keygent.app
+   ```
+
+4. 打开 Keygent。第一次打开会把 `weaverd` 注册成登录项（系统可能提示「已添加后台项目」，保持开着就行），并打开设置让你[配置模型](#配置模型)。
+
+App 包里自带 Python 和 MCP SDK，不用另外装任何东西。
+
+**更新：** 退出 Keygent，用新的替换「应用程序」里的旧版，再清一次隔离标记，打开。App 发现自带的代码变了会重启 `weaverd`，在跑的任务会接着跑。
+
+**卸载：** 退出 Keygent，然后
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Keygent.app
+launchctl bootout gui/$(id -u)/com.keygent.weaverd
+rm -rf /Applications/Keygent.app
 ```
 
-第一次打开时，Keygent 会把 `weaverd` 注册成登录项。App 包里自带 Python 和 MCP SDK，不用另外装任何东西。
+任务、记忆和模型设置在 `~/.weaver/` 里，不想留就把这个文件夹也删掉。
 
 ### 从源码构建
 
@@ -108,6 +178,18 @@ WEAVER_MODEL=<模型 ID>                           # 要支持 tool calling
 也可以用 `WEAVER_PROVIDER=<预设名>` 代替地址；本地服务（`ollama`、`lmstudio`、`vllm`）不需要 key。各家的方言差异（推理内容回传、缓存标记、max tokens 字段名）见 [design/providers.md](design/providers.md)。
 
 没有这个文件 `weaverd` 不会启动，原因写在 `~/.weaver/daemon.out`。
+
+## 常见问题
+
+| 现象 | 怎么办 |
+|---|---|
+| 「Keygent 已损坏，无法打开」 | 下载的包被隔离了，运行[安装](#下载)里那条 `xattr` 命令。 |
+| <kbd>⌘ ⇧ 空格</kbd> 没反应 | 可能被别的 App 占了（到「系统设置 › 键盘 › 键盘快捷键」看看输入法切换和其他启动器）。退出再打开 Keygent，让它重新注册热键。 |
+| App 显示「Weaver 没在运行」 | 看 `~/.weaver/daemon.out` 里写的原因。多半是还没配模型（<kbd>⌘ ,</kbd> → 模型），或者在「系统设置 › 通用 › 登录项」里把它关了。 |
+| 任务因为模型出错停了 | <kbd>⌘ ,</kbd> → 模型，检查接口地址、key 和模型 ID。模型要支持 tool calling。 |
+| 想看日志 | `python3 -m weaver daemon logs`，或者直接看 `~/.weaver/daemon.out`。每个任务的完整账本在 `~/.weaver/tasks/<id>/`。 |
+
+还是不行？[提个 issue](https://github.com/kiwi0719/keygent/issues/new)，带上 macOS 版本和 `daemon.out` 最后几行（先检查一下有没有隐私信息）。
 
 ## 不用 App 直接跑 Weaver
 

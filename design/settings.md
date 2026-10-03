@@ -170,7 +170,7 @@ design/api.md               v1.6：设置接口
 - **连不上的原因写成人话**（`weaver/mcp/manager.py` 的 `_describe`）：SDK 会吞掉 HTTP 状态码，所以远程服务器失败时再探一次——“服务器拒绝了（HTTP 401）：令牌不对、过期或没有权限”“地址不对（HTTP 404）”“连不上 x：网络不通或地址写错”；本地服务器：“找不到命令 x”“服务器进程退出了，看日志 …”。
 - `McpConfig` 的环境变量改成每次读当前进程的（设置页填的令牌对已经开着的任务也生效）。
 - **内置 skills**（另一个会话同时加的 `weaver/builtin_skills/`）也列出来，只读，标“内置”；可以新建同名的 Weaver skill 盖过它。
-- 联调隔离：`WEAVER_DAEMON_JSON` 设了时 App 的 weaver home 跟着那个文件走、不注册 / 不重启 launchd 里的 weaverd；`KEYGENT_DEBUG_NAME` 让调试通知只发给这个实例、也不抢 ⌥空格。调试入口加了 `settings[:tab]`、`keys:cmd+n`、`settext:`、`settings-state`、`winid`。
+- 联调隔离：`WEAVER_DAEMON_JSON` 设了时 App 的 weaver home 跟着那个文件走、不注册 / 不重启 launchd 里的 weaverd；`KEYGENT_DEBUG_NAME` 让调试通知只发给这个实例、也不抢 ⌘⇧空格、不退掉正在跑的 Keygent。调试入口加了 `settings[:tab]`、`keys:cmd+n`、`settext:`、`settings-state`、`winid`。
 - 任务 5 的单独自检并进了界面实测（界面用到全部接口）。
 
 **实测**（隔离的测试实例 + 临时 weaverd，真模型配置）：MCP 页 空状态 → ⌘N → 粘贴 JSON 认出 1 个 → ⌘↵ → “连接中”→“已连接 · 4 个工具”；常用服务器加“抓网页”“文件（填目录）”都连上；GitHub 不填令牌报“要填：GitHub 令牌”；编辑改名、⌘R 重连、⌘⌫ 两次删除进归档；从 Claude Code 导入（本机没有配置，显示“没找到”）。Skills 页：新建、改名（目录跟着改）、有改动 esc 提示、⌘⌫ 两次归档；Claude Code / 内置的只读。模型页：高级项填 abc 报错、填 6 保存写进临时 home 的 .env、真实的 `~/.weaver/.env` 没变。
