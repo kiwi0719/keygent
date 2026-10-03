@@ -10,6 +10,10 @@
 
 **Hand a long task to a coding agent from a keystroke, and come back when it needs you.**
 
+<p align="center">
+  <img src="docs/images/launcher.png" width="760" alt="The Keygent launcher: a task typed in one line, a file and a working folder attached, recent tasks below">
+</p>
+
 Keygent is a macOS menu-bar app on top of **Weaver**, a local coding agent that runs as a background service (`weaverd`). Press <kbd>⌘ ⇧ Space</kbd>, say what you want done in which folder, and go back to your work. The agent reads, edits and runs things in a sandbox; a capsule in the menu bar shows whether it is running, done, or waiting for you. Approvals, questions and errors from every task land in one queue you can clear from the keyboard.
 
 Weaver's core is built on one rule: **the event ledger is the only source of truth, and the kernel is a pure function over it.** Everything else (model calls, tools, the daemon, the app) hangs off the outside, so a task survives a crash, can be replayed, and every file change can be undone.
@@ -18,9 +22,12 @@ Weaver's core is built on one rule: **the event ledger is the only source of tru
 
 - [Status](#status)
 - [Quick look](#quick-look)
+- [What you get](#what-you-get)
+- [Keyboard](#keyboard)
 - [How it works](#how-it-works)
 - [Install](#install)
 - [Configure a model](#configure-a-model)
+- [Troubleshooting](#troubleshooting)
 - [Run Weaver without the app](#run-weaver-without-the-app)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -37,14 +44,57 @@ Weaver's core is built on one rule: **the event ledger is the only source of tru
 
 ## Quick look
 
-| Key | What it does |
-|---|---|
-| <kbd>⌘ ⇧ Space</kbd> | open / close the launcher (the only global hotkey): one line of what you want, a working folder, optional files or clipboard; whatever is waiting for you sits at <kbd>⌘ 1</kbd> |
-| <kbd>⌘ ,</kbd> | settings: Model · MCP · Skills · Permissions · Memory (<kbd>⌘ [</kbd> <kbd>⌘ ]</kbd> to switch pages), keyboard only |
-| <kbd>⌘ ⇧ O</kbd> | attach a file from Finder |
-| menu-bar capsule | left click opens it; right click has *Waiting for you*, *Reconnect*, *Quit* |
+1. Press <kbd>⌘ ⇧ Space</kbd> anywhere, type what you want (*"fix the flaky login test"*), pick a folder with <kbd>⌘ E</kbd>, press <kbd>↵</kbd>.
+2. Go back to your work. The capsule in the menu bar shows the task running.
+3. When the agent wants to do something outside its sandbox, it stops and asks. <kbd>⌘ ↵</kbd> allows, <kbd>⌫</kbd> denies, or edit the command first.
+4. When it is done, read the result, see what changed with <kbd>⌘ D</kbd>, and undo a file with <kbd>⌘ Z</kbd> if you don't like it.
 
-When a task needs you, it waits instead of guessing: **approve**, **deny**, **edit the arguments and approve**, or **answer the question**, from the task window or from the queue that collects waits across all tasks. If the app is closed, a system notification does the same job.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/approval.png" alt="A running task waiting for approval to run pip install, with Allow and Deny buttons"></td>
+    <td width="50%"><img src="docs/images/result.png" alt="A finished task: the result on top, the timeline of steps below"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>It waits for you instead of guessing</sub></td>
+    <td align="center"><sub>Result first, every step underneath</sub></td>
+  </tr>
+</table>
+
+If the app is closed, a system notification does the same job, and the daemon keeps working.
+
+## What you get
+
+- **One queue for everything waiting on you.** Approvals, questions and errors from all tasks land in one place: approve, deny, edit the arguments and approve, or answer, without hunting for the right window.
+- **Every change is reversible.** The task page lists changed files with +/- counts; <kbd>⌘ D</kbd> shows the diff, <kbd>⌘ Z</kbd> puts a file back the way it was before the task touched it.
+- **You can see what it is doing.** Live steps in plain language, a todo card the agent keeps up to date, a peek card under the menu-bar capsule, and <kbd>⌘ .</kbd> for the full process, including each sub-agent's own steps.
+- **Sandboxed by default.** `bash` can only write the working folder and temp; anything else asks you first. Secrets are masked before they reach the model or the log.
+- **Survives crashes.** Tasks run in `weaverd`, a background service started at login. Quit the app, reboot, or let it crash: the task picks up from its ledger.
+- **Bring your own model.** Any OpenAI-compatible endpoint or the Anthropic API, including local Ollama, LM Studio and vLLM.
+- **Extensible.** MCP servers (stdio and HTTP, OAuth, questions and sampling with per-call approval, `/` prompts in the launcher), skills, and memory you can view and edit in settings.
+
+## Keyboard
+
+Keygent is meant to be used without the mouse. The global hotkey is the only one that works outside the app; everything else works while its panel is open.
+
+| Where | Key | What it does |
+|---|---|---|
+| anywhere | <kbd>⌘ ⇧ Space</kbd> | open / close the launcher |
+| launcher | <kbd>↵</kbd> | start the task |
+| | <kbd>⌘ E</kbd> · <kbd>⌘ O</kbd> · <kbd>⌘ ⇧ O</kbd> | working folder · attach a recent file · attach from Finder |
+| | <kbd>⌘ 1</kbd>–<kbd>⌘ 9</kbd>, <kbd>↑</kbd> <kbd>↓</kbd> | pick a recent task, <kbd>↵</kbd> opens it; whatever is waiting for you sits at <kbd>⌘ 1</kbd> |
+| | `?` … | search earlier tasks, archived ones included |
+| | `/` … | use a prompt from an MCP server |
+| | <kbd>⌘ ⇧ A</kbd> | archived tasks (<kbd>⌘ R</kbd> restores) |
+| task | <kbd>⌘ ↵</kbd> · <kbd>⌫</kbd> | allow · deny |
+| | <kbd>⌘ ⌫</kbd> | stop the task |
+| | <kbd>⌘ .</kbd> | the full process; <kbd>↑</kbd> <kbd>↓</kbd> select a step, <kbd>↵</kbd> opens a sub-agent |
+| | <kbd>⌘ D</kbd> · <kbd>⌘ Z</kbd> | diff of changed files · undo a file (press twice) |
+| | <kbd>⌘ C</kbd> | copy the result |
+| | <kbd>⌘ ⇧ ↵</kbd> | full-screen details |
+| everywhere | <kbd>⌘ ,</kbd> | settings: Model · MCP · Skills · Permissions · Memory (<kbd>⌘ [</kbd> <kbd>⌘ ]</kbd> switch pages) |
+| | <kbd>esc</kbd> | back, or hide the panel |
+
+The menu-bar capsule: left click opens the task it shows, right click has *Waiting for you*, *Reconnect* and *Quit*.
 
 ## How it works
 
@@ -74,15 +124,35 @@ flowchart LR
 
 ### Download
 
-Grab `Keygent-<version>-arm64.zip` from [Releases](https://github.com/kiwi0719/keygent/releases), unzip, and move `Keygent.app` to `/Applications`.
+Requires macOS 14 or later on Apple silicon (M1 or newer).
 
-The build is ad-hoc signed, not notarized, so macOS quarantines it on download. Clear that once:
+1. Download `Keygent-<version>-arm64.zip` from the [latest release](https://github.com/kiwi0719/keygent/releases/latest). Optionally check it against the `.sha256` file next to it:
+
+   ```bash
+   shasum -a 256 -c Keygent-0.1.0-arm64.zip.sha256
+   ```
+
+2. Unzip it and move `Keygent.app` to `/Applications`.
+3. Clear the quarantine flag once. The build is ad-hoc signed, not notarized by Apple, so without this macOS says the app *"is damaged and can't be opened"* or *"cannot be verified"*:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Keygent.app
+   ```
+
+4. Open Keygent. On first launch it registers `weaverd` as a login item (macOS may show a *"Background item added"* notice; leave it on) and opens settings so you can [configure a model](#configure-a-model).
+
+The app bundle carries its own Python and the MCP SDK; nothing else needs to be installed.
+
+**Updating:** quit Keygent, replace the app in `/Applications`, clear the quarantine flag again, and open it. The app restarts `weaverd` when its bundled code changed; running tasks resume.
+
+**Uninstalling:** quit Keygent, then
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Keygent.app
+launchctl bootout gui/$(id -u)/com.keygent.weaverd
+rm -rf /Applications/Keygent.app
 ```
 
-On first launch Keygent registers `weaverd` as a login item. The app bundle carries its own Python and the MCP SDK; nothing else needs to be installed.
+Tasks, memories and your model settings live in `~/.weaver/`. Delete that folder too if you want them gone.
 
 ### Build from source
 
@@ -108,6 +178,18 @@ WEAVER_MODEL=<model id>                         # must support tool calling
 `WEAVER_PROVIDER=<preset>` picks a preset instead of a URL; local servers (`ollama`, `lmstudio`, `vllm`) need no key. Per-provider quirks (reasoning echo, cache markers, max-tokens field name) are covered in [design/providers.md](design/providers.md).
 
 `weaverd` does not start without this file; it logs why to `~/.weaver/daemon.out` and waits.
+
+## Troubleshooting
+
+| Symptom | What to do |
+|---|---|
+| *"Keygent is damaged and can't be opened"* | The download is quarantined. Run the `xattr` command from [Install](#download). |
+| <kbd>⌘ ⇧ Space</kbd> does nothing | Another app may own that shortcut (check input-source and launcher apps in System Settings › Keyboard › Keyboard Shortcuts). Quit and reopen Keygent so it registers the hotkey again. |
+| The app says *Weaver 没在运行* (Weaver is not running) | Check `~/.weaver/daemon.out` for the reason. Usually the model is not configured yet (<kbd>⌘ ,</kbd> → Model), or the login item was switched off in System Settings › General › Login Items. |
+| A task stopped with a model error | Open <kbd>⌘ ,</kbd> → Model and check the base URL, key and model ID. The model must support tool calling. |
+| You want the logs | `python3 -m weaver daemon logs`, or read `~/.weaver/daemon.out`. Each task's full ledger is in `~/.weaver/tasks/<id>/`. |
+
+Still stuck? [Open an issue](https://github.com/kiwi0719/keygent/issues/new) with the macOS version and the last lines of `daemon.out` (check it for anything private first).
 
 ## Run Weaver without the app
 
